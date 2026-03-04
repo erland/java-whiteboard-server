@@ -111,6 +111,8 @@ Protocol (JSON):
   - `whiteboard.limits.ws.max-message-bytes`
   - `whiteboard.limits.ws.rate.per-second`
   - `whiteboard.limits.ws.rate.burst`
+  - `whiteboard.limits.ws.max-connections-per-board`
+  - `whiteboard.limits.snapshots.max-bytes`
 - Health:
   - `/q/health/live`
   - `/q/health/ready` (fails if DB is down)

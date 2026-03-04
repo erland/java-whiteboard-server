@@ -89,4 +89,23 @@ public class SnapshotsResourceTest {
              .statusCode(404)
              .body("code", is("NOT_FOUND"));
     }
+
+    @Test
+    @TestSecurity(user = "alice", roles = { "whiteboard-user" })
+    void create_rejects_too_large_snapshot_payload() {
+        String boardId = UUID.randomUUID().toString();
+        boardsRepository.create(new Board(boardId, "B", "advanced", "alice", "active", null, null));
+
+        // Default limit is 1 MiB; create a little more than that.
+        String big = "x".repeat(1_100_000);
+        String body = "{\"snapshot\":{\"big\":\"" + big + "\"}}";
+
+        given()
+          .contentType("application/json")
+          .body(body)
+          .when().post("/api/boards/" + boardId + "/snapshots")
+          .then()
+             .statusCode(413)
+             .body("code", is("PAYLOAD_TOO_LARGE"));
+    }
 }

@@ -1,5 +1,6 @@
 package info.isaksson.erland.whiteboard.ws;
 
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import jakarta.enterprise.context.ApplicationScoped;
@@ -16,11 +17,14 @@ import io.micrometer.core.instrument.MeterRegistry;
 public class WsMetrics {
 
     private final AtomicInteger activeConnections = new AtomicInteger(0);
+    private final MeterRegistry registry;
+    private final ConcurrentHashMap<String, Counter> rejectedByReason = new ConcurrentHashMap<>();
     private final Counter opsReceived;
     private final Counter errors;
 
     @Inject
     public WsMetrics(MeterRegistry registry) {
+        this.registry = registry;
         Gauge.builder("whiteboard.ws.connections.active", activeConnections, AtomicInteger::get)
                 .description("Active websocket connections")
                 .register(registry);
@@ -41,4 +45,15 @@ public class WsMetrics {
     public void opReceived() { opsReceived.increment(); }
 
     public void error() { errors.increment(); }
+
+
+    public void incRejected(String reason) {
+        // Tag by reason to understand why connections are refused (e.g. per-board limit)
+        String key = (reason == null || reason.isBlank()) ? "unknown" : reason;
+        rejectedByReason.computeIfAbsent(key, r -> Counter.builder("whiteboard.ws.connections.rejected")
+                .description("Rejected websocket connections")
+                .tag("reason", r)
+                .register(registry)).increment();
+    }
+
 }

@@ -26,11 +26,17 @@ import info.isaksson.erland.whiteboard.persistence.BoardsRepository;
 import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
 import info.isaksson.erland.whiteboard.security.Authz;
 import io.quarkus.security.identity.SecurityIdentity;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
+
+import java.nio.charset.StandardCharsets;
 
 @Path("/api/boards")
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class BoardSnapshotsResource {
+
+    @ConfigProperty(name = "whiteboard.limits.snapshots.max-bytes", defaultValue = "1048576")
+    long maxSnapshotBytes;
 
     @Inject
     BoardsRepository boardsRepository;
@@ -68,6 +74,15 @@ public class BoardSnapshotsResource {
         } catch (Exception e) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(new ApiError("VALIDATION_ERROR", "Field 'snapshot' must be valid JSON."))
+                    .build();
+        }
+
+        int sizeBytes = snapshotJson.getBytes(StandardCharsets.UTF_8).length;
+        if (sizeBytes > maxSnapshotBytes) {
+            return Response.status(413)
+                    .entity(new ApiError(
+                            "PAYLOAD_TOO_LARGE",
+                            "Snapshot exceeds max size of " + maxSnapshotBytes + " bytes."))
                     .build();
         }
 

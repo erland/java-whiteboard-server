@@ -19,9 +19,14 @@ public class WsLimits {
     @ConfigProperty(name = "whiteboard.limits.ws.rate.burst", defaultValue = "40")
     int burst;
 
+    @ConfigProperty(name = "whiteboard.limits.ws.max-connections-per-board", defaultValue = "64")
+    int maxConnectionsPerBoard;
+
     public int maxMessageBytes() { return maxMessageBytes; }
 
     public int ratePerSecond() { return ratePerSecond; }
 
     public int burst() { return burst; }
+
+    public int maxConnectionsPerBoard() { return maxConnectionsPerBoard; }
 }

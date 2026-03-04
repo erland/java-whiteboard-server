@@ -91,6 +91,14 @@ var decision = authorizer.authorize(boardId, jwtUserId, inviteToken);
         session.getUserProperties().put("userId", effectiveUserId);
         session.getUserProperties().put("permission", decision.permission());
 
+        // Hard limit: cap concurrent connections per board.
+        var current = boardSessions.get(boardId);
+        if (current != null && current.size() >= limits.maxConnectionsPerBoard()) {
+            metrics.incRejected(boardId);
+            close(session, CloseReason.CloseCodes.TRY_AGAIN_LATER, "Board connection limit reached");
+            return;
+        }
+
         
         session.getUserProperties().put("rateLimiter", new TokenBucketRateLimiter(limits.burst(), limits.ratePerSecond()));
 boardSessions.computeIfAbsent(boardId, k -> new java.util.concurrent.ConcurrentHashMap<>())
