@@ -4,6 +4,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.websocket.CloseReason;
 import jakarta.websocket.OnClose;
@@ -19,7 +20,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
-@ServerEndpoint("/ws/boards/{boardId}")
+import org.eclipse.microprofile.jwt.JsonWebToken;
+
+import io.smallrye.jwt.auth.principal.JWTParser;
+
+@ServerEndpoint(value = "/ws/boards/{boardId}", configurator = WsHandshakeConfigurator.class)
 @ApplicationScoped
 public class BoardWebSocketEndpoint {
 
@@ -41,7 +46,9 @@ public class BoardWebSocketEndpoint {
 @Inject
     BoardJoinAuthorizer authorizer;
 
-    /**
+    @Inject
+    Instance<JWTParser> jwtParser;
+/**
      * Per-board connected sessions.
      */
     private final java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.ConcurrentHashMap<String, Session>> boardSessions = new java.util.concurrent.ConcurrentHashMap<>();
@@ -52,10 +59,19 @@ public class BoardWebSocketEndpoint {
         session.getUserProperties().put("connectionId", connectionId);
         session.getUserProperties().put("boardId", boardId);
 
-        String userId = firstQueryParam(session, "userId");
         String inviteToken = firstQueryParam(session, "invite");
+String bearer = bearerTokenFromHandshake(session);
+if (bearer == null || bearer.isBlank()) {
+    // Optional fallback for clients that cannot set headers easily
+    bearer = firstQueryParam(session, "access_token");
+}
 
-        var decision = authorizer.authorize(boardId, userId, inviteToken);
+String jwtUserId = null;
+if (bearer != null && !bearer.isBlank()) {
+    jwtUserId = userIdFromJwt(bearer);
+}
+
+var decision = authorizer.authorize(boardId, jwtUserId, inviteToken);
         if (!decision.allowed()) {
             metrics.error();
             close(session, CloseReason.CloseCodes.VIOLATED_POLICY, "Not allowed");
@@ -215,6 +231,33 @@ if (rlObj instanceof TokenBucketRateLimiter rl) {
         } catch (Exception ignored) {
         }
     }
+
+
+private String bearerTokenFromHandshake(Session session) {
+    try {
+        Object raw = session.getUserProperties().get(WsHandshakeConfigurator.AUTHORIZATION_HEADER);
+        if (raw instanceof String s) {
+            if (s.startsWith("Bearer ")) return s.substring("Bearer ".length()).trim();
+        }
+        return null;
+    } catch (Exception e) {
+        return null;
+    }
+}
+
+private String userIdFromJwt(String token) {
+    try {
+        if (jwtParser == null || !jwtParser.isResolvable()) {
+            return null;
+        }
+        JsonWebToken jwt = jwtParser.get().parse(token);
+String preferred = jwt.getClaim("preferred_username");
+        if (preferred != null && !preferred.isBlank()) return preferred;
+        return jwt.getSubject();
+    } catch (Exception e) {
+        return null;
+    }
+}
 
     private String firstQueryParam(Session session, String key) {
         try {
