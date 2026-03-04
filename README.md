@@ -92,3 +92,15 @@ curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/me | jq
 - `GET /api/boards/{boardId}/snapshots/latest` -> latest snapshot
 - `GET /api/boards/{boardId}/snapshots/{version}` -> snapshot by version
 - `GET /api/boards/{boardId}/snapshots` -> list versions (desc)
+
+## WebSocket MVP (Step 8)
+WebSocket endpoint:
+- `ws://localhost:8080/ws/boards/{boardId}?userId=<userId>`
+- or with an invite token:
+  `ws://localhost:8080/ws/boards/{boardId}?invite=<token>`
+
+Protocol (JSON):
+- Server -> `joined`: `{ "type":"joined", "boardId":"...", "yourUserId":"...", "users":[...] }`
+- Server -> `presence`: `{ "type":"presence", "boardId":"...", "users":[...] }`
+- Client -> `op`: `{ "type":"op", "op": { ... } }`
+- Server -> `op`: `{ "type":"op", "boardId":"...", "from":"...", "op":{...} }` (broadcast to other peers)

@@ -88,6 +88,18 @@
   <artifactId>quarkus-test-security</artifactId>
   <scope>test</scope>
 </dependency>
+<!-- WebSocket (MVP realtime) -->
+<dependency>
+  <groupId>io.quarkus</groupId>
+  <artifactId>quarkus-websockets</artifactId>
+</dependency>
+
+<!-- Jakarta WebSocket API (compile-time) -->
+<dependency>
+  <groupId>jakarta.websocket</groupId>
+  <artifactId>jakarta.websocket-api</artifactId>
+</dependency>
+
   </dependencies>
 
   <build>
