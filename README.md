@@ -136,3 +136,11 @@ If the board has no snapshots yet, `latestSnapshotVersion` and `latestSnapshot` 
 - Invite joins inherit invite permission (`viewer` or `editor`).
 - Clients with `viewer` permission **cannot** send `op` messages; the server responds with:
   `{ "type":"error", "code":"FORBIDDEN", ... }`
+
+
+## WebSocket op sequencing (Step 10.4)
+Broadcast `op` messages now include a server-assigned monotonic `seq` (per board):
+
+- Server -> `op`: `{ "type":"op", "boardId":"...", "seq": 42, "from":"...", "op":{...} }`
+
+MVP: the sequence resets if the server restarts.

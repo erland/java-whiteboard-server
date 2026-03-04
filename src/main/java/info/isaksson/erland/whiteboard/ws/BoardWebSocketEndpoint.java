@@ -43,6 +43,9 @@ public class BoardWebSocketEndpoint {
     @Inject
     SnapshotsRepository snapshotsRepository;
 
+    @Inject
+    BoardOpSequencer opSequencer;
+
     
     @Inject
     WsLimits limits;
@@ -203,7 +206,8 @@ if ("viewer".equals(permission)) {
     return;
 }
 
-broadcastOp(boardId, connectionId, new WsMessage.Op(boardId, fromUserId, op));
+long seq = opSequencer.next(boardId);
+            broadcastOp(boardId, connectionId, new WsMessage.Op(boardId, seq, fromUserId, op));
             return;
         }
 

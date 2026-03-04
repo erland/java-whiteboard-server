@@ -30,9 +30,9 @@ public sealed interface WsMessage permits WsMessage.Joined, WsMessage.Presence, 
         }
     }
 
-    record Op(String type, String boardId, String from, JsonNode op) implements WsMessage {
-        public Op(String boardId, String from, JsonNode op) {
-            this("op", boardId, from, op);
+    record Op(String type, String boardId, long seq, String from, JsonNode op) implements WsMessage {
+        public Op(String boardId, long seq, String from, JsonNode op) {
+            this("op", boardId, seq, from, op);
         }
     }
 
