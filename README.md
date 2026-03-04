@@ -80,3 +80,9 @@ TOKEN="$(curl -s \
 
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/me | jq
 ```
+
+## Invites API (Step 6)
+- `POST /api/boards/{boardId}/invites` (owner) -> returns a one-time `token` (store it client-side)
+- `GET /api/boards/{boardId}/invites` (owner) -> lists invites (no raw tokens)
+- `DELETE /api/boards/{boardId}/invites/{inviteId}` (owner) -> revoke
+- `POST /api/invites/validate` (public) -> validate token
