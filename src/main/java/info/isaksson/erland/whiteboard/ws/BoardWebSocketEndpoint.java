@@ -24,6 +24,9 @@ import org.eclipse.microprofile.jwt.JsonWebToken;
 
 import io.smallrye.jwt.auth.principal.JWTParser;
 
+import info.isaksson.erland.whiteboard.domain.BoardSnapshot;
+import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
+
 @ServerEndpoint(value = "/ws/boards/{boardId}", configurator = WsHandshakeConfigurator.class)
 @ApplicationScoped
 public class BoardWebSocketEndpoint {
@@ -36,6 +39,9 @@ public class BoardWebSocketEndpoint {
 
     @Inject
     PresenceHub presenceHub;
+
+    @Inject
+    SnapshotsRepository snapshotsRepository;
 
     
     @Inject
@@ -88,8 +94,21 @@ boardSessions.computeIfAbsent(boardId, k -> new java.util.concurrent.ConcurrentH
 
         Map<String, PresenceHub.UserPresence> users = presenceHub.join(boardId, connectionId, effectiveUserId);
 
-        // Send joined to this session
-        send(session, new WsMessage.Joined(boardId, effectiveUserId, usersToJson(users)));
+// Resolve latest snapshot pointer (and include snapshot JSON) for join payload
+Long latestVersion = null;
+com.fasterxml.jackson.databind.JsonNode latestSnapshot = null;
+try {
+    BoardSnapshot latest = snapshotsRepository.getLatest(boardId).orElse(null);
+    if (latest != null) {
+        latestVersion = latest.version();
+        latestSnapshot = mapper.readTree(latest.snapshotJson());
+    }
+} catch (Exception ignored) {
+    // If snapshots are unavailable/corrupt, we still allow join and just omit snapshot data
+}
+
+// Send joined to this session
+send(session, new WsMessage.Joined(boardId, effectiveUserId, latestVersion, latestSnapshot, usersToJson(users)));
 
         // Broadcast presence to all sessions on this board
         broadcastPresence(boardId);

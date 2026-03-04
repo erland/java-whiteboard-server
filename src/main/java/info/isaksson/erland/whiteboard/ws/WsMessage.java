@@ -4,9 +4,23 @@ import com.fasterxml.jackson.databind.JsonNode;
 
 public sealed interface WsMessage permits WsMessage.Joined, WsMessage.Presence, WsMessage.Op, WsMessage.Error {
 
-    record Joined(String type, String boardId, String yourUserId, JsonNode users) implements WsMessage {
-        public Joined(String boardId, String yourUserId, JsonNode users) {
-            this("joined", boardId, yourUserId, users);
+    /**
+     * Sent to the joining client after successful authorization.
+     *
+     * Includes:
+     * - presence users list
+     * - latest snapshot pointer (and optionally the snapshot itself)
+     */
+    record Joined(
+            String type,
+            String boardId,
+            String yourUserId,
+            Long latestSnapshotVersion,
+            JsonNode latestSnapshot,
+            JsonNode users
+    ) implements WsMessage {
+        public Joined(String boardId, String yourUserId, Long latestSnapshotVersion, JsonNode latestSnapshot, JsonNode users) {
+            this("joined", boardId, yourUserId, latestSnapshotVersion, latestSnapshot, users);
         }
     }
 

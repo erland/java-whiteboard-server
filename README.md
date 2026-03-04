@@ -121,3 +121,11 @@ Protocol (JSON):
   - `whiteboard.ws.errors`
 - Correlation id:
   - Server accepts/returns `X-Correlation-Id` for HTTP requests and puts it in MDC as `correlationId`
+
+
+## WebSocket join payload (Step 10.2)
+The server now includes a snapshot pointer (and snapshot JSON) in the `joined` message:
+
+- `joined`: `{ "type":"joined", "boardId":"...", "yourUserId":"...", "latestSnapshotVersion": 2, "latestSnapshot": { ... }, "users":[...] }`
+
+If the board has no snapshots yet, `latestSnapshotVersion` and `latestSnapshot` are `null`.
