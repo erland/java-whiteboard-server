@@ -104,3 +104,20 @@ Protocol (JSON):
 - Server -> `presence`: `{ "type":"presence", "boardId":"...", "users":[...] }`
 - Client -> `op`: `{ "type":"op", "op": { ... } }`
 - Server -> `op`: `{ "type":"op", "boardId":"...", "from":"...", "op":{...} }` (broadcast to other peers)
+
+
+## Hardening (Step 9)
+- Limits:
+  - `whiteboard.limits.ws.max-message-bytes`
+  - `whiteboard.limits.ws.rate.per-second`
+  - `whiteboard.limits.ws.rate.burst`
+- Health:
+  - `/q/health/live`
+  - `/q/health/ready` (fails if DB is down)
+- Metrics (Prometheus):
+  - `/q/metrics`
+  - `whiteboard.ws.connections.active`
+  - `whiteboard.ws.ops.received`
+  - `whiteboard.ws.errors`
+- Correlation id:
+  - Server accepts/returns `X-Correlation-Id` for HTTP requests and puts it in MDC as `correlationId`

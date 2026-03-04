@@ -23,13 +23,22 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 @ApplicationScoped
 public class BoardWebSocketEndpoint {
 
-    @Inject
+    
+    private static final org.jboss.logging.Logger LOG = org.jboss.logging.Logger.getLogger(BoardWebSocketEndpoint.class);
+
+@Inject
     ObjectMapper mapper;
 
     @Inject
     PresenceHub presenceHub;
 
+    
     @Inject
+    WsLimits limits;
+
+    @Inject
+    WsMetrics metrics;
+@Inject
     BoardJoinAuthorizer authorizer;
 
     /**
@@ -48,6 +57,7 @@ public class BoardWebSocketEndpoint {
 
         var decision = authorizer.authorize(boardId, userId, inviteToken);
         if (!decision.allowed()) {
+            metrics.error();
             close(session, CloseReason.CloseCodes.VIOLATED_POLICY, "Not allowed");
             return;
         }
@@ -55,7 +65,9 @@ public class BoardWebSocketEndpoint {
         String effectiveUserId = decision.effectiveUserId();
         session.getUserProperties().put("userId", effectiveUserId);
 
-        boardSessions.computeIfAbsent(boardId, k -> new java.util.concurrent.ConcurrentHashMap<>())
+        
+        session.getUserProperties().put("rateLimiter", new TokenBucketRateLimiter(limits.burst(), limits.ratePerSecond()));
+boardSessions.computeIfAbsent(boardId, k -> new java.util.concurrent.ConcurrentHashMap<>())
                 .put(connectionId, session);
 
         Map<String, PresenceHub.UserPresence> users = presenceHub.join(boardId, connectionId, effectiveUserId);
@@ -65,7 +77,10 @@ public class BoardWebSocketEndpoint {
 
         // Broadcast presence to all sessions on this board
         broadcastPresence(boardId);
-    }
+    
+        metrics.connectionOpened();
+        LOG.debugf("WS open boardId=%s connectionId=%s userId=%s", boardId, connectionId, effectiveUserId);
+}
 
     @OnClose
     public void onClose(Session session, CloseReason reason) {
@@ -85,10 +100,14 @@ public class BoardWebSocketEndpoint {
         }
 
         broadcastPresence(boardId);
+        metrics.connectionClosed();
+        LOG.debugf("WS close boardId=%s connectionId=%s", boardId, connectionId);
     }
 
     @OnError
     public void onError(Session session, Throwable throwable) {
+        metrics.error();
+        LOG.debugf("WS error: %s", throwable == null ? "unknown" : throwable.getClass().getSimpleName());
         // Best effort: close. Errors are expected when clients disconnect abruptly.
         try {
             close(session, CloseReason.CloseCodes.UNEXPECTED_CONDITION, "Error");
@@ -98,10 +117,28 @@ public class BoardWebSocketEndpoint {
 
     @OnMessage
     public void onMessage(String message, Session session) {
+// Hardening: message size limit
+if (message != null && message.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > limits.maxMessageBytes()) {
+    metrics.error();
+    send(session, new WsMessage.Error("MESSAGE_TOO_LARGE", "Message exceeds max size."));
+    close(session, CloseReason.CloseCodes.TOO_BIG, "Message too large");
+    return;
+}
+
+// Hardening: rate limit per connection
+Object rlObj = session.getUserProperties().get("rateLimiter");
+if (rlObj instanceof TokenBucketRateLimiter rl) {
+    if (!rl.tryConsume()) {
+        metrics.error();
+        send(session, new WsMessage.Error("RATE_LIMITED", "Too many messages."));
+        return;
+    }
+}
         String boardId = (String) session.getUserProperties().get("boardId");
         String fromUserId = (String) session.getUserProperties().get("userId");
         String connectionId = (String) session.getUserProperties().get("connectionId");
         if (boardId == null || fromUserId == null || connectionId == null) {
+            metrics.error();
             close(session, CloseReason.CloseCodes.VIOLATED_POLICY, "Not allowed");
             return;
         }
@@ -110,6 +147,7 @@ public class BoardWebSocketEndpoint {
         try {
             root = mapper.readTree(message);
         } catch (Exception e) {
+            metrics.error();
             send(session, new WsMessage.Error("BAD_REQUEST", "Invalid JSON."));
             return;
         }
@@ -117,7 +155,9 @@ public class BoardWebSocketEndpoint {
         String type = root.hasNonNull("type") ? root.get("type").asText() : "";
         if ("op".equals(type)) {
             JsonNode op = root.get("op");
+            metrics.opReceived();
             if (op == null || op.isNull()) {
+                metrics.error();
                 send(session, new WsMessage.Error("VALIDATION_ERROR", "Field 'op' is required."));
                 return;
             }
