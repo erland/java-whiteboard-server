@@ -23,3 +23,47 @@ mvn quarkus:dev
 ## Notes
 - Step 1 scaffolds the repo, build, and CI only (Quarkus REST + tests + Dockerfile + CI).
 - Docker Compose (Postgres + Keycloak) will be added in Step 2.
+
+## Dev stack (Docker Compose)
+This repo includes a development `docker-compose.yml` with:
+- Postgres (db: `whiteboard`, user/pass: `whiteboard`)
+- Keycloak (admin/admin) on http://localhost:18080
+- Server on http://localhost:8080
+
+Start everything:
+```bash
+docker compose up -d --build
+```
+
+Stop:
+```bash
+docker compose down
+```
+
+### Keycloak dev realm
+A realm is imported automatically at startup:
+- Realm: `whiteboard`
+- Users:
+  - `alice` / `alice`
+  - `bob` / `bob`
+  - `admin` / `admin`
+
+### Getting a dev access token (password grant)
+For quick local testing, Keycloak is configured with a public client `whiteboard-pwa` with direct access grants enabled.
+
+Example token request for `alice`:
+```bash
+curl -s \
+  -d "grant_type=password" \
+  -d "client_id=whiteboard-pwa" \
+  -d "username=alice" \
+  -d "password=alice" \
+  "http://localhost:18080/realms/whiteboard/protocol/openid-connect/token" | jq -r .access_token
+```
+
+You can then call:
+```bash
+curl -s http://localhost:8080/api/healthz | jq
+```
+
+Note: Step 4 will introduce protected endpoints that require the bearer token.

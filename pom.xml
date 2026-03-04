@@ -54,6 +54,18 @@
       <artifactId>quarkus-smallrye-health</artifactId>
     </dependency>
 
+    <!-- Security (Keycloak / OIDC JWT validation) -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-oidc</artifactId>
+    </dependency>
+
+    <!-- Database connectivity (PostgreSQL) -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-jdbc-postgresql</artifactId>
+    </dependency>
+
     <!-- Tests -->
     <dependency>
       <groupId>io.quarkus</groupId>

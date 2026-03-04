@@ -1,0 +1,71 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: whiteboard-postgres
+    environment:
+      POSTGRES_DB: whiteboard
+      POSTGRES_USER: whiteboard
+      POSTGRES_PASSWORD: whiteboard
+    ports:
+      - "5432:5432"
+    volumes:
+      - whiteboard_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whiteboard -d whiteboard"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: whiteboard-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "18080:8080"
+    volumes:
+      - ./dev/keycloak/realm-whiteboard.json:/opt/keycloak/data/import/realm-whiteboard.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && grep -q '200' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whiteboard-server
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      # HTTP
+      QUARKUS_HTTP_HOST: 0.0.0.0
+      QUARKUS_HTTP_PORT: 8080
+
+      # Datasource (Step 3 adds schema via Flyway; this just proves connectivity)
+      QUARKUS_DATASOURCE_DB_KIND: postgresql
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/whiteboard
+      QUARKUS_DATASOURCE_USERNAME: whiteboard
+      QUARKUS_DATASOURCE_PASSWORD: whiteboard
+
+      # OIDC (Keycloak)
+      QUARKUS_OIDC_AUTH_SERVER_URL: http://keycloak:8080/realms/whiteboard
+      QUARKUS_OIDC_CLIENT_ID: whiteboard-server
+      QUARKUS_OIDC_TLS_VERIFICATION: none
+
+      # For now we don't require auth on every endpoint (Step 4 will introduce protected endpoints).
+      # Keeping this in place makes it easy to start validating tokens early.
+      QUARKUS_OIDC_APPLICATION_TYPE: service
+    ports:
+      - "8080:8080"
+
+volumes:
+  whiteboard_pgdata:
