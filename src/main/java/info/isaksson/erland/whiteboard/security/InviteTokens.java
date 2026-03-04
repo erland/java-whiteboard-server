@@ -20,6 +20,13 @@ public final class InviteTokens {
     }
 
     /**
+     * Backwards-compatible alias used by some tests/docs.
+     */
+    public static String newToken() {
+        return generateToken();
+    }
+
+    /**
      * Hash token with SHA-256 and encode as lower-case hex.
      * Store/compare the hash, never the raw token.
      */

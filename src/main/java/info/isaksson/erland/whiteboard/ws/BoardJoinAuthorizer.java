@@ -9,6 +9,7 @@ import info.isaksson.erland.whiteboard.domain.Board;
 import info.isaksson.erland.whiteboard.domain.Invite;
 import info.isaksson.erland.whiteboard.persistence.BoardsRepository;
 import info.isaksson.erland.whiteboard.persistence.InvitesRepository;
+import info.isaksson.erland.whiteboard.security.BoardAccessService;
 import info.isaksson.erland.whiteboard.security.InviteTokens;
 
 @ApplicationScoped
@@ -19,6 +20,9 @@ public class BoardJoinAuthorizer {
 
     @Inject
     InvitesRepository invitesRepository;
+
+    @Inject
+    BoardAccessService boardAccess;
 
     public record JoinDecision(boolean allowed, String reason, String effectiveUserId, String permission) {}
 
@@ -43,6 +47,15 @@ public class BoardJoinAuthorizer {
             if (board.ownerUserId().equals(userId)) {
                 return new JoinDecision(true, "OK", userId, "owner");
             }
+
+            // Shared access (viewer/editor)
+            if (boardAccess != null) {
+                var access = boardAccess.findAccess(boardId, userId).orElse(null);
+                if (access != null && access.canRead()) {
+                    return new JoinDecision(true, "OK", userId, access.role());
+                }
+            }
+
             return new JoinDecision(false, "NOT_ALLOWED", null, null);
         }
 
@@ -58,8 +71,12 @@ public class BoardJoinAuthorizer {
             // Best-effort: increment uses (not strictly required for MVP)
             invitesRepository.incrementUses(invite.id());
 
-            return new JoinDecision(true, "OK", "invite:" + invite.id(), invite.permission());
-}
+            String role = switch (invite.permission()) {
+                case "edit", "editor" -> "editor";
+                default -> "viewer";
+            };
+            return new JoinDecision(true, "OK", "invite:" + invite.id(), role);
+        }
 
         return new JoinDecision(false, "NOT_ALLOWED", null, null);
     }
