@@ -86,3 +86,9 @@ curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/me | jq
 - `GET /api/boards/{boardId}/invites` (owner) -> lists invites (no raw tokens)
 - `DELETE /api/boards/{boardId}/invites/{inviteId}` (owner) -> revoke
 - `POST /api/invites/validate` (public) -> validate token
+
+## Snapshots API (Step 7)
+- `POST /api/boards/{boardId}/snapshots` -> create a versioned snapshot (opaque JSON)
+- `GET /api/boards/{boardId}/snapshots/latest` -> latest snapshot
+- `GET /api/boards/{boardId}/snapshots/{version}` -> snapshot by version
+- `GET /api/boards/{boardId}/snapshots` -> list versions (desc)
