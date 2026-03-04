@@ -67,3 +67,16 @@ curl -s http://localhost:8080/api/healthz | jq
 ```
 
 Note: Step 4 will introduce protected endpoints that require the bearer token.
+
+### Authenticated endpoint: /api/me
+Once you have an access token, call:
+```bash
+TOKEN="$(curl -s \
+  -d "grant_type=password" \
+  -d "client_id=whiteboard-pwa" \
+  -d "username=alice" \
+  -d "password=alice" \
+  "http://localhost:18080/realms/whiteboard/protocol/openid-connect/token" | jq -r .access_token)"
+
+curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/me | jq
+```
