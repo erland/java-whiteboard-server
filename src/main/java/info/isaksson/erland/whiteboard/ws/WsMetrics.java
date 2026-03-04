@@ -1,59 +1,117 @@
 package info.isaksson.erland.whiteboard.ws;
 
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
-
-import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
-
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
+
 /**
- * Basic metrics for realtime MVP.
+ * Small, focused metrics helper for the websocket layer.
+ *
+ * The metrics are intentionally simple (counters + a per-board connection gauge)
+ * to keep the implementation light while still giving useful operational signals.
  */
 @ApplicationScoped
 public class WsMetrics {
 
-    private final AtomicInteger activeConnections = new AtomicInteger(0);
     private final MeterRegistry registry;
-    private final ConcurrentHashMap<String, Counter> rejectedByReason = new ConcurrentHashMap<>();
+
+    private final Counter connectionsOpened;
+    private final Counter connectionsClosed;
     private final Counter opsReceived;
+    private final Counter opsBroadcast;
+    private final Counter presenceBroadcast;
+    private final Counter joinsAccepted;
+    private final Counter jsonErrors;
     private final Counter errors;
+
+    // Gauge state
+    private final ConcurrentHashMap<String, AtomicInteger> boardConnections = new ConcurrentHashMap<>();
 
     @Inject
     public WsMetrics(MeterRegistry registry) {
         this.registry = registry;
-        Gauge.builder("whiteboard.ws.connections.active", activeConnections, AtomicInteger::get)
-                .description("Active websocket connections")
-                .register(registry);
-
-        this.opsReceived = Counter.builder("whiteboard.ws.ops.received")
-                .description("Number of op messages received")
-                .register(registry);
-
-        this.errors = Counter.builder("whiteboard.ws.errors")
-                .description("Number of websocket processing errors")
-                .register(registry);
+        this.connectionsOpened = registry.counter("whiteboard_ws_connections_open_total");
+        this.connectionsClosed = registry.counter("whiteboard_ws_connections_closed_total");
+        this.opsReceived = registry.counter("whiteboard_ws_ops_in_total");
+        this.opsBroadcast = registry.counter("whiteboard_ws_ops_out_total");
+        this.presenceBroadcast = registry.counter("whiteboard_ws_presence_out_total");
+        this.joinsAccepted = registry.counter("whiteboard_ws_joins_accepted_total");
+        this.jsonErrors = registry.counter("whiteboard_ws_json_errors_total");
+        this.errors = registry.counter("whiteboard_ws_errors_total");
     }
 
-    public void connectionOpened() { activeConnections.incrementAndGet(); }
+    /** Backwards compatible: global counter only. */
+    public void connectionOpened() {
+        connectionsOpened.increment();
+    }
 
-    public void connectionClosed() { activeConnections.decrementAndGet(); }
+    /** Backwards compatible: global counter only. */
+    public void connectionClosed() {
+        connectionsClosed.increment();
+    }
 
-    public void opReceived() { opsReceived.increment(); }
+    /** Preferred: count open connections and update per-board gauge. */
+    public void connectionOpened(String boardId) {
+        connectionOpened();
+        if (boardId == null) {
+            return;
+        }
+        AtomicInteger ai = boardConnections.computeIfAbsent(boardId, id -> {
+            AtomicInteger x = new AtomicInteger(0);
+            Gauge.builder("whiteboard_ws_board_connections", x, AtomicInteger::get)
+                    .description("Active websocket connections per board")
+                    .tag("boardId", id)
+                    .register(registry);
+            return x;
+        });
+        ai.incrementAndGet();
+    }
 
-    public void error() { errors.increment(); }
+    /** Preferred: count closed connections and update per-board gauge. */
+    public void connectionClosed(String boardId) {
+        connectionClosed();
+        if (boardId == null) {
+            return;
+        }
+        AtomicInteger ai = boardConnections.get(boardId);
+        if (ai != null) {
+            ai.decrementAndGet();
+        }
+    }
 
+    public void joinAccepted() {
+        joinsAccepted.increment();
+    }
+
+    public void opReceived() {
+        opsReceived.increment();
+    }
+
+    public void opBroadcast() {
+        opsBroadcast.increment();
+    }
+
+    public void presenceBroadcast() {
+        presenceBroadcast.increment();
+    }
+
+    public void jsonError() {
+        jsonErrors.increment();
+    }
+
+    public void error() {
+        errors.increment();
+    }
 
     public void incRejected(String reason) {
-        // Tag by reason to understand why connections are refused (e.g. per-board limit)
-        String key = (reason == null || reason.isBlank()) ? "unknown" : reason;
-        rejectedByReason.computeIfAbsent(key, r -> Counter.builder("whiteboard.ws.connections.rejected")
-                .description("Rejected websocket connections")
-                .tag("reason", r)
-                .register(registry)).increment();
+        Counter.builder("whiteboard_ws_rejected_total")
+                .tag("reason", reason == null ? "unknown" : reason)
+                .register(registry)
+                .increment();
     }
-
 }

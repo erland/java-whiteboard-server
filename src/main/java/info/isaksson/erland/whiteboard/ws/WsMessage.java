@@ -17,10 +17,22 @@ public sealed interface WsMessage permits WsMessage.Joined, WsMessage.Presence, 
             String yourUserId,
             Long latestSnapshotVersion,
             JsonNode latestSnapshot,
-            JsonNode users
+            JsonNode users,
+            String wsSessionId,
+            String correlationId
     ) implements WsMessage {
         public Joined(String boardId, String yourUserId, Long latestSnapshotVersion, JsonNode latestSnapshot, JsonNode users) {
-            this("joined", boardId, yourUserId, latestSnapshotVersion, latestSnapshot, users);
+            this("joined", boardId, yourUserId, latestSnapshotVersion, latestSnapshot, users, null, null);
+        }
+
+        public Joined(String boardId,
+                      String yourUserId,
+                      Long latestSnapshotVersion,
+                      JsonNode latestSnapshot,
+                      JsonNode users,
+                      String wsSessionId,
+                      String correlationId) {
+            this("joined", boardId, yourUserId, latestSnapshotVersion, latestSnapshot, users, wsSessionId, correlationId);
         }
     }
 
