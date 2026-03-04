@@ -20,7 +20,7 @@ public class BoardJoinAuthorizer {
     @Inject
     InvitesRepository invitesRepository;
 
-    public record JoinDecision(boolean allowed, String reason, String effectiveUserId) {}
+    public record JoinDecision(boolean allowed, String reason, String effectiveUserId, String permission) {}
 
     /**
      * Authorize a join.
@@ -36,31 +36,31 @@ public class BoardJoinAuthorizer {
     public JoinDecision authorize(String boardId, String userId, String inviteToken) {
         Board board = boardsRepository.findById(boardId).orElse(null);
         if (board == null || "deleted".equals(board.status())) {
-            return new JoinDecision(false, "NOT_ALLOWED", null);
+            return new JoinDecision(false, "NOT_ALLOWED", null, null);
         }
 
         if (userId != null && !userId.isBlank()) {
             if (board.ownerUserId().equals(userId)) {
-                return new JoinDecision(true, "OK", userId);
+                return new JoinDecision(true, "OK", userId, "owner");
             }
-            return new JoinDecision(false, "NOT_ALLOWED", null);
+            return new JoinDecision(false, "NOT_ALLOWED", null, null);
         }
 
         if (inviteToken != null && !inviteToken.isBlank()) {
             String tokenHash = InviteTokens.sha256Hex(inviteToken.trim());
             Invite invite = invitesRepository.findByTokenHash(tokenHash).orElse(null);
-            if (invite == null) return new JoinDecision(false, "NOT_ALLOWED", null);
-            if (!invite.boardId().equals(boardId)) return new JoinDecision(false, "NOT_ALLOWED", null);
-            if (invite.revokedAt() != null) return new JoinDecision(false, "NOT_ALLOWED", null);
-            if (invite.expiresAt() != null && invite.expiresAt().isBefore(Instant.now())) return new JoinDecision(false, "NOT_ALLOWED", null);
-            if (invite.maxUses() != null && invite.uses() >= invite.maxUses()) return new JoinDecision(false, "NOT_ALLOWED", null);
+            if (invite == null) return new JoinDecision(false, "NOT_ALLOWED", null, null);
+            if (!invite.boardId().equals(boardId)) return new JoinDecision(false, "NOT_ALLOWED", null, null);
+            if (invite.revokedAt() != null) return new JoinDecision(false, "NOT_ALLOWED", null, null);
+            if (invite.expiresAt() != null && invite.expiresAt().isBefore(Instant.now())) return new JoinDecision(false, "NOT_ALLOWED", null, null);
+            if (invite.maxUses() != null && invite.uses() >= invite.maxUses()) return new JoinDecision(false, "NOT_ALLOWED", null, null);
 
             // Best-effort: increment uses (not strictly required for MVP)
             invitesRepository.incrementUses(invite.id());
 
-            return new JoinDecision(true, "OK", "invite:" + invite.id());
-        }
+            return new JoinDecision(true, "OK", "invite:" + invite.id(), invite.permission());
+}
 
-        return new JoinDecision(false, "NOT_ALLOWED", null);
+        return new JoinDecision(false, "NOT_ALLOWED", null, null);
     }
 }

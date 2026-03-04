@@ -86,6 +86,7 @@ var decision = authorizer.authorize(boardId, jwtUserId, inviteToken);
 
         String effectiveUserId = decision.effectiveUserId();
         session.getUserProperties().put("userId", effectiveUserId);
+        session.getUserProperties().put("permission", decision.permission());
 
         
         session.getUserProperties().put("rateLimiter", new TokenBucketRateLimiter(limits.burst(), limits.ratePerSecond()));
@@ -171,8 +172,9 @@ if (rlObj instanceof TokenBucketRateLimiter rl) {
 }
         String boardId = (String) session.getUserProperties().get("boardId");
         String fromUserId = (String) session.getUserProperties().get("userId");
+        String permission = (String) session.getUserProperties().get("permission");
         String connectionId = (String) session.getUserProperties().get("connectionId");
-        if (boardId == null || fromUserId == null || connectionId == null) {
+        if (boardId == null || fromUserId == null || connectionId == null || permission == null) {
             metrics.error();
             close(session, CloseReason.CloseCodes.VIOLATED_POLICY, "Not allowed");
             return;
@@ -196,7 +198,12 @@ if (rlObj instanceof TokenBucketRateLimiter rl) {
                 send(session, new WsMessage.Error("VALIDATION_ERROR", "Field 'op' is required."));
                 return;
             }
-            broadcastOp(boardId, connectionId, new WsMessage.Op(boardId, fromUserId, op));
+if ("viewer".equals(permission)) {
+    send(session, new WsMessage.Error("FORBIDDEN", "You do not have permission to publish operations."));
+    return;
+}
+
+broadcastOp(boardId, connectionId, new WsMessage.Op(boardId, fromUserId, op));
             return;
         }
 

@@ -30,6 +30,7 @@ public class BoardJoinAuthorizerTest {
         var ok = a.authorize(boardId, "alice", null);
         assertTrue(ok.allowed());
         assertEquals("alice", ok.effectiveUserId());
+        assertEquals("owner", ok.permission());
 
         var no = a.authorize(boardId, "bob", null);
         assertFalse(no.allowed());
@@ -62,6 +63,7 @@ public class BoardJoinAuthorizerTest {
         var ok = a.authorize(boardId, null, token);
         assertTrue(ok.allowed());
         assertTrue(ok.effectiveUserId().startsWith("invite:"));
+        assertEquals("viewer", ok.permission());
     }
 
     @Test

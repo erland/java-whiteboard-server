@@ -129,3 +129,10 @@ The server now includes a snapshot pointer (and snapshot JSON) in the `joined` m
 - `joined`: `{ "type":"joined", "boardId":"...", "yourUserId":"...", "latestSnapshotVersion": 2, "latestSnapshot": { ... }, "users":[...] }`
 
 If the board has no snapshots yet, `latestSnapshotVersion` and `latestSnapshot` are `null`.
+
+
+## WebSocket permissions (Step 10.3)
+- Board owner joins with permission `owner`.
+- Invite joins inherit invite permission (`viewer` or `editor`).
+- Clients with `viewer` permission **cannot** send `op` messages; the server responds with:
+  `{ "type":"error", "code":"FORBIDDEN", ... }`
