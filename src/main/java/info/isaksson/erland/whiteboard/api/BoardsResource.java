@@ -94,6 +94,9 @@ public class BoardsResource {
                 .filter(BoardAccessService.Access::canRead)
                 .orElseThrow(NotFoundException::new);
 
+        // Archived boards should still be retrievable by the owner (and other readers)
+        // to support UI flows (e.g. showing an archived status) and match API tests.
+        // Only "deleted" boards are treated as not found.
         Board b = access.board();
         if ("deleted".equals(b.status())) {
             throw new NotFoundException();

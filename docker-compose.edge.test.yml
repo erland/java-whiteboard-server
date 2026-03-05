@@ -1,0 +1,79 @@
+version: "3.9"
+
+services:
+  edge-nginx:
+    image: nginx:1.27-alpine
+    container_name: whiteboard-edge-nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/test/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/test/pwa-whiteboard/config.json:/etc/nginx/pwa-whiteboard/config.json:ro
+    depends_on:
+      - server
+      - keycloak
+      - pwa
+
+  # ----- PWA -----
+  pwa:
+    image: ghcr.io/erland/pwa-whiteboard:latest
+    container_name: pwa-whiteboard
+    restart: unless-stopped
+
+  # ----- API server -----
+  server:
+    image: ghcr.io/erland/java-whiteboard-server:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: whiteboard-server
+    environment:
+      QUARKUS_PROFILE: prod
+
+      QUARKUS_DATASOURCE_DB_KIND: postgresql
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://postgres:5432/whiteboard
+      QUARKUS_DATASOURCE_USERNAME: whiteboard
+      QUARKUS_DATASOURCE_PASSWORD: whiteboard
+
+      QUARKUS_OIDC_AUTH_SERVER_URL: http://keycloak:8080/auth/realms/whiteboard
+      QUARKUS_OIDC_CLIENT_ID: whiteboard-server
+      QUARKUS_OIDC_APPLICATION_TYPE: service
+      QUARKUS_OIDC_TLS_VERIFICATION: none
+
+      # behind reverse proxy
+      QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING: "true"
+
+    depends_on:
+      - postgres
+      - keycloak
+    restart: unless-stopped
+
+  # ----- Postgres (API) -----
+  postgres:
+    image: postgres:16
+    container_name: whiteboard-server-postgres
+    environment:
+      POSTGRES_DB: whiteboard
+      POSTGRES_USER: whiteboard
+      POSTGRES_PASSWORD: whiteboard
+    volumes:
+      - whiteboard_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # ----- Keycloak -----
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: whiteboard-server-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_PROXY: edge
+      KC_HOSTNAME_STRICT: "false"
+    volumes:
+      - ./deploy/test/keycloak/realm-whiteboard.json:/opt/keycloak/data/import/realm-whiteboard.json:ro
+    restart: unless-stopped
+
+volumes:
+  whiteboard_pgdata:

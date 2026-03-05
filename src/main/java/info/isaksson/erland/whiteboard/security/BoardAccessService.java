@@ -65,7 +65,9 @@ public class BoardAccessService {
         }
         for (String id : sharedIds) {
             if (seen.contains(id)) continue;
-            boardsRepository.findById(id).ifPresent(out::add);
+            boardsRepository.findById(id)
+                    .filter(b -> "active".equals(b.status()))
+                    .ifPresent(out::add);
         }
         return out;
     }

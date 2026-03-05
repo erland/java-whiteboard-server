@@ -1,0 +1,48 @@
+version: "3.9"
+
+services:
+  edge-nginx:
+    image: nginx:1.27-alpine
+    container_name: whiteboard-edge-nginx
+    ports:
+      - "80:80"
+    extra_hosts:
+      # Works on Linux (and is harmless on Docker Desktop); allows nginx to reach host services like Vite/Quarkus dev servers.
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./deploy/dev/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/dev/pwa-whiteboard/config.json:/etc/nginx/pwa-whiteboard/config.json:ro
+    depends_on:
+      - keycloak
+      - postgres
+
+  postgres:
+    image: postgres:16
+    container_name: whiteboard-server-postgres
+    environment:
+      POSTGRES_DB: whiteboard
+      POSTGRES_USER: whiteboard
+      POSTGRES_PASSWORD: whiteboard
+    ports:
+      - "5432:5432"
+    volumes:
+      - whiteboard_pgdata:/var/lib/postgresql/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: whiteboard-server-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_PROXY: edge
+      KC_HOSTNAME_STRICT: "false"
+    ports:
+      # Optional direct access; preferred access is via http://localhost/auth/ through nginx.
+      - "18080:8080"
+    volumes:
+      - ./deploy/dev/keycloak/realm-whiteboard.json:/opt/keycloak/data/import/realm-whiteboard.json:ro
+
+volumes:
+  whiteboard_pgdata:

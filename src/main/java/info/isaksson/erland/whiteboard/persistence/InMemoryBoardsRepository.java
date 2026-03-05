@@ -40,7 +40,7 @@ public class InMemoryBoardsRepository implements BoardsRepository {
     public List<Board> listForOwner(String ownerUserId) {
         return boards.values().stream()
                 .filter(b -> b.ownerUserId().equals(ownerUserId))
-                .filter(b -> !"deleted".equals(b.status()))
+                .filter(b -> "active".equals(b.status()))
                 .sorted(Comparator.comparing(Board::updatedAt).reversed())
                 .toList();
     }

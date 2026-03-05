@@ -49,7 +49,7 @@ public class JdbcBoardsRepository implements BoardsRepository {
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(
                      "SELECT id, name, type, owner_user_id, status, created_at, updated_at " +
-                     "FROM boards WHERE owner_user_id = ? AND status <> 'deleted' ORDER BY updated_at DESC")) {
+                     "FROM boards WHERE owner_user_id = ? AND status = 'active' ORDER BY updated_at DESC")) {
             ps.setString(1, ownerUserId);
             try (ResultSet rs = ps.executeQuery()) {
                 List<Board> out = new ArrayList<>();

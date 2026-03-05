@@ -27,7 +27,7 @@ mvn quarkus:dev
 ## Dev stack (Docker Compose)
 This repo includes a development `docker-compose.yml` with:
 - Postgres (db: `whiteboard`, user/pass: `whiteboard`)
-- Keycloak (admin/admin) on http://localhost:18080
+- Keycloak (admin/admin) via edge nginx on http://localhost/auth (optional direct on http://localhost:18080/auth)
 - Server on http://localhost:8080
 
 Start everything:
@@ -58,7 +58,7 @@ curl -s \
   -d "client_id=whiteboard-pwa" \
   -d "username=alice" \
   -d "password=alice" \
-  "http://localhost:18080/realms/whiteboard/protocol/openid-connect/token" | jq -r .access_token
+  "http://localhost:18080/auth/realms/whiteboard/protocol/openid-connect/token" | jq -r .access_token
 ```
 
 You can then call:
@@ -76,7 +76,7 @@ TOKEN="$(curl -s \
   -d "client_id=whiteboard-pwa" \
   -d "username=alice" \
   -d "password=alice" \
-  "http://localhost:18080/realms/whiteboard/protocol/openid-connect/token" | jq -r .access_token)"
+  "http://localhost:18080/auth/realms/whiteboard/protocol/openid-connect/token" | jq -r .access_token)"
 
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/me | jq
 ```
@@ -146,3 +146,53 @@ Broadcast `op` messages now include a server-assigned monotonic `seq` (per board
 - Server -> `op`: `{ "type":"op", "boardId":"...", "seq": 42, "from":"...", "op":{...} }`
 
 MVP: the sequence resets if the server restarts.
+
+## "Edge" dev/test stacks (same pattern as java-modeller-server)
+
+The recommended setup is to run an "edge" nginx container that acts as a single front door:
+
+- `/pwa-whiteboard/` → the PWA
+- `/pwa-whiteboard/config.json` → runtime config served by nginx
+- `/api/` → Quarkus REST API
+- `/ws/` → Quarkus WebSocket endpoint
+- `/auth/` → Keycloak
+
+This keeps everything on a single origin (`http://localhost/...`) and avoids CORS + redirect URI confusion.
+
+### Dev edge stack (contributors)
+
+Run only infra in Docker (nginx + postgres + keycloak), while you run Quarkus + Vite on the host.
+
+1) Start edge + postgres + keycloak:
+```bash
+docker compose -f docker-compose.edge.dev.yml up -d
+```
+
+2) Run the server on the host (expects postgres + keycloak from docker):
+```bash
+mvn quarkus:dev
+```
+
+3) Run the client on the host (from the pwa-whiteboard repo):
+```bash
+npm install
+npm run dev
+```
+
+Then open:
+- App: `http://localhost/pwa-whiteboard/`
+- Keycloak admin (optional direct): `http://localhost:18080/auth/`
+
+### Test edge stack ("just run it" on a VM)
+
+Runs everything in Docker, using GHCR images:
+
+```bash
+docker compose -f docker-compose.edge.test.yml up -d
+```
+
+Then open:
+- App: `http://<host>/pwa-whiteboard/`
+- Keycloak: `http://<host>/auth/`
+
+> For production-like deployments you’ll typically put TLS in front of `edge-nginx` (or replace it with a TLS-capable reverse proxy).
