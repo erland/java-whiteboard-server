@@ -21,9 +21,11 @@ public class WsHandshakeConfigurator extends ServerEndpointConfig.Configurator {
     public void modifyHandshake(ServerEndpointConfig sec, HandshakeRequest request, HandshakeResponse response) {
         Map<String, List<String>> headers = request.getHeaders();
         if (headers != null) {
-            List<String> auth = headers.get(AUTHORIZATION_HEADER);
-            if (auth != null && !auth.isEmpty()) {
-                sec.getUserProperties().put(AUTHORIZATION_HEADER, auth.get(0));
+            // Header keys are not guaranteed to preserve original casing across containers/proxies.
+            // Capture Authorization in a case-insensitive way.
+            String auth = firstHeaderIgnoreCase(headers, AUTHORIZATION_HEADER);
+            if (auth != null && !auth.isBlank()) {
+                sec.getUserProperties().put(AUTHORIZATION_HEADER, auth);
             }
 
             String correlationId = firstHeaderIgnoreCase(headers, CORRELATION_ID_HEADER);

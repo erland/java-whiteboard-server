@@ -2,6 +2,7 @@ package info.isaksson.erland.whiteboard.ws;
 
 import java.util.Map;
 import java.util.UUID;
+import java.security.Principal;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
@@ -12,6 +13,8 @@ import jakarta.websocket.OnError;
 import jakarta.websocket.OnMessage;
 import jakarta.websocket.OnOpen;
 import jakarta.websocket.Session;
+import jakarta.websocket.SendHandler;
+import jakarta.websocket.SendResult;
 import jakarta.websocket.server.PathParam;
 import jakarta.websocket.server.ServerEndpoint;
 
@@ -80,22 +83,39 @@ public class BoardWebSocketEndpoint {
         session.getUserProperties().put(PROP_BOARD_ID, boardId);
 
         withWsMdc(session, () -> {
+            LOG.debugf("WS opening boardId=%s connectionId=%s wsSessionId=%s requestUri=%s", boardId, connectionId, wsSessionId,
+                    session == null ? null : session.getRequestURI());
             String inviteToken = firstQueryParam(session, "invite");
 
-            String bearer = bearerTokenFromHandshake(session);
-            if (bearer == null || bearer.isBlank()) {
-                // Optional fallback for clients that cannot set headers easily
-                bearer = firstQueryParam(session, "access_token");
-            }
-
+            // Prefer the authenticated principal established by Quarkus OIDC during the HTTP upgrade.
+            // This avoids re-parsing tokens and works whether the client sent the token via header or query param.
             String jwtUserId = null;
-            if (bearer != null && !bearer.isBlank()) {
-                jwtUserId = userIdFromJwt(bearer);
+            Principal principal = session == null ? null : session.getUserPrincipal();
+            if (principal instanceof JsonWebToken jwt) {
+                String preferred = jwt.getClaim("preferred_username");
+                if (preferred != null && !preferred.isBlank()) {
+                    jwtUserId = preferred;
+                } else {
+                    jwtUserId = jwt.getSubject();
+                }
+            } else if (principal != null) {
+                jwtUserId = principal.getName();
+            } else {
+                // Fallback: extract the bearer token from the handshake (Authorization) or query param (access_token).
+                String bearer = bearerTokenFromHandshake(session);
+                if (bearer == null || bearer.isBlank()) {
+                    bearer = firstQueryParam(session, "access_token");
+                }
+                if (bearer != null && !bearer.isBlank()) {
+                    jwtUserId = userIdFromJwt(bearer);
+                }
             }
 
             var decision = authorizer.authorize(boardId, jwtUserId, inviteToken);
             if (!decision.allowed()) {
                 metrics.incRejected("not_allowed");
+                LOG.debugf("WS rejected boardId=%s connectionId=%s jwtUserId=%s invite=%s", boardId, connectionId, jwtUserId,
+                        inviteToken == null ? null : "<present>");
                 close(session, CloseReason.CloseCodes.VIOLATED_POLICY, "Not allowed");
                 return;
             }
@@ -108,6 +128,8 @@ public class BoardWebSocketEndpoint {
             var current = boardSessions.get(boardId);
             if (current != null && current.size() >= limits.maxConnectionsPerBoard()) {
                 metrics.incRejected("board_connection_limit");
+                LOG.debugf("WS rejected (board connection limit) boardId=%s connectionId=%s current=%d limit=%d", boardId, connectionId,
+                        current.size(), limits.maxConnectionsPerBoard());
                 close(session, CloseReason.CloseCodes.TRY_AGAIN_LATER, "Board connection limit reached");
                 return;
             }
@@ -144,7 +166,8 @@ public class BoardWebSocketEndpoint {
 
             metrics.joinAccepted();
             metrics.connectionOpened(boardId);
-            LOG.debugf("WS open boardId=%s connectionId=%s wsSessionId=%s userId=%s", boardId, connectionId, wsSessionId, effectiveUserId);
+            LOG.debugf("WS open boardId=%s connectionId=%s wsSessionId=%s userId=%s permission=%s invite=%s", boardId, connectionId,
+                    wsSessionId, effectiveUserId, decision.permission(), inviteToken == null ? null : "<present>");
         });
 }
 
@@ -170,7 +193,9 @@ public class BoardWebSocketEndpoint {
 
             broadcastPresence(boardId);
             metrics.connectionClosed(boardId);
-            LOG.debugf("WS close boardId=%s connectionId=%s", boardId, connectionId);
+            LOG.debugf("WS close boardId=%s connectionId=%s code=%s reason=%s", boardId, connectionId,
+                    reason == null ? null : reason.getCloseCode(),
+                    reason == null ? null : reason.getReasonPhrase());
         });
     }
 
@@ -178,7 +203,11 @@ public class BoardWebSocketEndpoint {
     public void onError(Session session, Throwable throwable) {
         withWsMdc(session, () -> {
             metrics.error();
-            LOG.debugf("WS error: %s", throwable == null ? "unknown" : throwable.getClass().getSimpleName());
+            if (throwable == null) {
+                LOG.debug("WS error: unknown");
+            } else {
+                LOG.debugf(throwable, "WS error: %s", throwable.getClass().getSimpleName());
+            }
         });
         // Best effort: close. Errors are expected when clients disconnect abruptly.
         try {
@@ -256,7 +285,9 @@ public class BoardWebSocketEndpoint {
         if (sessions == null) return;
 
         for (var entry : sessions.entrySet()) {
-            if (entry.getKey().equals(fromConnectionId)) continue; // don't echo
+            // Option A: echo operations back to the sender as well.
+            // Some clients treat the server as the source of truth and only
+            // persist/apply local operations once the server broadcasts them.
             send(entry.getValue(), opMsg);
             metrics.opBroadcast();
         }
@@ -311,13 +342,31 @@ public class BoardWebSocketEndpoint {
     private void send(Session session, Object payload) {
         try {
             String json = mapper.writeValueAsString(payload);
-            session.getAsyncRemote().sendText(json);
-        } catch (Exception ignored) {
+            session.getAsyncRemote().sendText(json, new SendHandler() {
+                @Override
+                public void onResult(SendResult result) {
+                    if (result == null) {
+                        LOG.debug("WS send completed with null result");
+                        return;
+                    }
+                    if (!result.isOK()) {
+                        Throwable ex = result.getException();
+                        if (ex == null) {
+                            LOG.debug("WS send failed (no exception)");
+                        } else {
+                            LOG.debugf(ex, "WS send failed: %s", ex.getClass().getSimpleName());
+                        }
+                    }
+                }
+            });
+        } catch (Exception e) {
+            LOG.debugf(e, "WS send failed to serialize or dispatch");
         }
     }
 
     private void close(Session session, CloseReason.CloseCode code, String reason) {
         try {
+            LOG.debugf("WS closing code=%s reason=%s", code, reason);
             session.close(new CloseReason(code, reason));
         } catch (Exception ignored) {
         }
@@ -353,12 +402,43 @@ String preferred = jwt.getClaim("preferred_username");
     private String firstQueryParam(Session session, String key) {
         try {
             var map = session.getRequestParameterMap();
-            if (map == null) return null;
-            var values = map.get(key);
-            if (values == null || values.isEmpty()) return null;
-            return values.get(0);
+            if (map != null) {
+                var values = map.get(key);
+                if (values != null) {
+                    for (String v : values) {
+                        if (v != null && !v.isBlank()) return v;
+                    }
+                }
+            }
+
+            // Some containers do not populate requestParameterMap for WebSocket sessions.
+            // Fall back to parsing the query string from the request URI.
+            var uri = session.getRequestURI();
+            if (uri == null) return null;
+            return firstQueryParamFromQuery(uri.getRawQuery(), key);
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private String firstQueryParamFromQuery(String rawQuery, String key) {
+        if (rawQuery == null || rawQuery.isBlank() || key == null || key.isBlank()) return null;
+        try {
+            // rawQuery is still URL-encoded.
+            String[] parts = rawQuery.split("&");
+            for (String part : parts) {
+                if (part == null || part.isBlank()) continue;
+                int idx = part.indexOf('=');
+                String k = idx >= 0 ? part.substring(0, idx) : part;
+                String v = idx >= 0 ? part.substring(idx + 1) : "";
+                k = java.net.URLDecoder.decode(k, java.nio.charset.StandardCharsets.UTF_8);
+                if (!key.equals(k)) continue;
+                if (v == null || v.isBlank()) continue;
+                v = java.net.URLDecoder.decode(v, java.nio.charset.StandardCharsets.UTF_8);
+                if (!v.isBlank()) return v;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
     }
 }
