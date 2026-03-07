@@ -11,7 +11,10 @@ import org.junit.jupiter.api.Test;
 import info.isaksson.erland.whiteboard.domain.Board;
 import info.isaksson.erland.whiteboard.domain.Invite;
 import info.isaksson.erland.whiteboard.persistence.BoardsRepository;
+import info.isaksson.erland.whiteboard.persistence.InMemoryBoardPermissionsRepository;
 import info.isaksson.erland.whiteboard.persistence.InvitesRepository;
+import info.isaksson.erland.whiteboard.security.BoardAccessService;
+import info.isaksson.erland.whiteboard.security.BoardGuards;
 import info.isaksson.erland.whiteboard.security.InviteTokens;
 
 public class BoardJoinAuthorizerTest {
@@ -24,7 +27,7 @@ public class BoardJoinAuthorizerTest {
         boards.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
 
         BoardJoinAuthorizer a = new BoardJoinAuthorizer();
-        a.boardsRepository = boards;
+        a.boardGuards = createBoardGuards(boards);
         a.invitePolicy = new info.isaksson.erland.whiteboard.security.InvitePolicy(invites);
 
         var ok = a.authorize(boardId, "alice", null);
@@ -44,7 +47,7 @@ public class BoardJoinAuthorizerTest {
         boards.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
 
         String token = "tok-" + UUID.randomUUID();
-        Invite inv = invites.create(new Invite(
+        invites.create(new Invite(
                 UUID.randomUUID().toString(),
                 boardId,
                 InviteTokens.sha256Hex(token),
@@ -57,7 +60,7 @@ public class BoardJoinAuthorizerTest {
         ));
 
         BoardJoinAuthorizer a = new BoardJoinAuthorizer();
-        a.boardsRepository = boards;
+        a.boardGuards = createBoardGuards(boards);
         a.invitePolicy = new info.isaksson.erland.whiteboard.security.InvitePolicy(invites);
 
         var ok = a.authorize(boardId, null, token);
@@ -87,13 +90,17 @@ public class BoardJoinAuthorizerTest {
         ));
 
         BoardJoinAuthorizer a = new BoardJoinAuthorizer();
-        a.boardsRepository = boards;
+        a.boardGuards = createBoardGuards(boards);
         a.invitePolicy = new info.isaksson.erland.whiteboard.security.InvitePolicy(invites);
 
         var no = a.authorize(boardId, null, token);
         assertFalse(no.allowed());
     }
 
+
+    private static BoardGuards createBoardGuards(BoardsRepository boards) {
+        return new BoardGuards(boards, new BoardAccessService(boards, new InMemoryBoardPermissionsRepository()));
+    }
     // Minimal repos for unit tests (no CDI)
     static class SimpleBoardsRepo implements BoardsRepository {
         private final java.util.concurrent.ConcurrentHashMap<String, Board> store = new java.util.concurrent.ConcurrentHashMap<>();

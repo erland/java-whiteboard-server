@@ -20,11 +20,9 @@ import info.isaksson.erland.whiteboard.api.dto.CreateSnapshotRequest;
 import info.isaksson.erland.whiteboard.api.dto.SnapshotResponse;
 import info.isaksson.erland.whiteboard.api.dto.SnapshotVersionsResponse;
 import info.isaksson.erland.whiteboard.api.errors.ApiError;
-import info.isaksson.erland.whiteboard.domain.Board;
 import info.isaksson.erland.whiteboard.domain.BoardSnapshot;
-import info.isaksson.erland.whiteboard.persistence.BoardsRepository;
 import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
-import info.isaksson.erland.whiteboard.security.BoardAccessService;
+import info.isaksson.erland.whiteboard.security.BoardGuards;
 import info.isaksson.erland.whiteboard.security.Authz;
 import io.quarkus.security.identity.SecurityIdentity;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -39,11 +37,9 @@ public class BoardSnapshotsResource {
     @ConfigProperty(name = "whiteboard.limits.snapshots.max-bytes", defaultValue = "1048576")
     long maxSnapshotBytes;
 
-    @Inject
-    BoardsRepository boardsRepository;
 
     @Inject
-    BoardAccessService boardAccess;
+    BoardGuards boardGuards;
 
     @Inject
     SnapshotsRepository snapshotsRepository;
@@ -60,12 +56,7 @@ public class BoardSnapshotsResource {
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
 
-        BoardAccessService.Access access = boardAccess.findAccess(boardId, userId)
-                .filter(BoardAccessService.Access::canWrite)
-                .orElseThrow(NotFoundException::new);
-
-        Board board = access.board();
-        if ("deleted".equals(board.status())) throw new NotFoundException();
+        boardGuards.requireWritableAccess(boardId, userId);
 
         JsonNode snapshotNode = req == null ? null : req.snapshot();
         if (snapshotNode == null || snapshotNode.isNull()) {
@@ -104,11 +95,7 @@ public class BoardSnapshotsResource {
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
 
-        BoardAccessService.Access access = boardAccess.findAccess(boardId, userId)
-                .filter(BoardAccessService.Access::canRead)
-                .orElseThrow(NotFoundException::new);
-        Board board = access.board();
-        if ("deleted".equals(board.status())) throw new NotFoundException();
+        boardGuards.requireReadableAccess(boardId, userId);
 
         BoardSnapshot latest = snapshotsRepository.getLatest(boardId).orElseThrow(NotFoundException::new);
         return SnapshotResponse.from(latest, mapper);
@@ -120,11 +107,7 @@ public class BoardSnapshotsResource {
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
 
-        BoardAccessService.Access access = boardAccess.findAccess(boardId, userId)
-                .filter(BoardAccessService.Access::canRead)
-                .orElseThrow(NotFoundException::new);
-        Board board = access.board();
-        if ("deleted".equals(board.status())) throw new NotFoundException();
+        boardGuards.requireReadableAccess(boardId, userId);
 
         BoardSnapshot s = snapshotsRepository.get(boardId, version).orElseThrow(NotFoundException::new);
         return SnapshotResponse.from(s, mapper);
@@ -136,11 +119,7 @@ public class BoardSnapshotsResource {
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
 
-        BoardAccessService.Access access = boardAccess.findAccess(boardId, userId)
-                .filter(BoardAccessService.Access::canRead)
-                .orElseThrow(NotFoundException::new);
-        Board board = access.board();
-        if ("deleted".equals(board.status())) throw new NotFoundException();
+        boardGuards.requireReadableAccess(boardId, userId);
 
         List<Long> versions = snapshotsRepository.listVersions(boardId);
         return new SnapshotVersionsResponse(versions);

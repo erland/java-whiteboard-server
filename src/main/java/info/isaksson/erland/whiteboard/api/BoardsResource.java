@@ -21,6 +21,7 @@ import info.isaksson.erland.whiteboard.api.dto.UpdateBoardRequest;
 import info.isaksson.erland.whiteboard.domain.Board;
 import info.isaksson.erland.whiteboard.persistence.BoardsRepository;
 import info.isaksson.erland.whiteboard.security.BoardAccessService;
+import info.isaksson.erland.whiteboard.security.BoardGuards;
 import info.isaksson.erland.whiteboard.security.Authz;
 import io.quarkus.security.identity.SecurityIdentity;
 
@@ -34,11 +35,13 @@ public class BoardsResource {
 
     private final BoardsRepository boardsRepository;
     private final BoardAccessService boardAccess;
+    private final BoardGuards boardGuards;
     private final SecurityIdentity identity;
 
-    public BoardsResource(BoardsRepository boardsRepository, BoardAccessService boardAccess, SecurityIdentity identity) {
+    public BoardsResource(BoardsRepository boardsRepository, BoardAccessService boardAccess, BoardGuards boardGuards, SecurityIdentity identity) {
         this.boardsRepository = boardsRepository;
         this.boardAccess = boardAccess;
+        this.boardGuards = boardGuards;
         this.identity = identity;
     }
 
@@ -102,14 +105,7 @@ public class BoardsResource {
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
 
-        BoardAccessService.Access access = boardAccess.findAccess(id, userId)
-                .filter(BoardAccessService.Access::canRead)
-                .orElseThrow(NotFoundException::new);
-
-        Board b = access.board();
-        if ("deleted".equals(b.status())) {
-            throw new NotFoundException();
-        }
+        Board b = boardGuards.requireReadableAccess(id, userId).board();
         return BoardResponse.from(b);
     }
 
@@ -119,14 +115,7 @@ public class BoardsResource {
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
 
-        Board existing = boardsRepository.findById(id).orElseThrow(NotFoundException::new);
-        if ("deleted".equals(existing.status())) {
-            throw new NotFoundException();
-        }
-
-        if (!boardAccess.findAccess(id, userId).map(BoardAccessService.Access::canWrite).orElse(false)) {
-            throw new NotFoundException();
-        }
+        Board existing = boardGuards.requireWritableAccess(id, userId).board();
         if (!"active".equals(existing.status())) {
             return Response.status(Response.Status.CONFLICT)
                     .entity(new info.isaksson.erland.whiteboard.api.errors.ApiError("BOARD_NOT_ACTIVE", "Board is not active."))
@@ -158,10 +147,7 @@ public class BoardsResource {
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
 
-        Board existing = boardsRepository.findById(id).orElseThrow(NotFoundException::new);
-        if (!existing.ownerUserId().equals(userId) || "deleted".equals(existing.status())) {
-            throw new NotFoundException();
-        }
+        boardGuards.requireOwner(id, userId);
 
         boolean ok = boardsRepository.archive(id, userId);
         if (!ok) {

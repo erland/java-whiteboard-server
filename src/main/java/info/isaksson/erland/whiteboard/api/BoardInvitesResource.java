@@ -21,11 +21,10 @@ import info.isaksson.erland.whiteboard.api.dto.CreateInviteRequest;
 import info.isaksson.erland.whiteboard.api.dto.InviteCreatedResponse;
 import info.isaksson.erland.whiteboard.api.dto.InviteResponse;
 import info.isaksson.erland.whiteboard.api.errors.ApiError;
-import info.isaksson.erland.whiteboard.domain.Board;
 import info.isaksson.erland.whiteboard.domain.Invite;
-import info.isaksson.erland.whiteboard.persistence.BoardsRepository;
 import info.isaksson.erland.whiteboard.persistence.InvitesRepository;
 import info.isaksson.erland.whiteboard.security.Authz;
+import info.isaksson.erland.whiteboard.security.BoardGuards;
 import info.isaksson.erland.whiteboard.security.InviteTokens;
 import io.quarkus.security.identity.SecurityIdentity;
 
@@ -34,8 +33,6 @@ import io.quarkus.security.identity.SecurityIdentity;
 @Consumes(MediaType.APPLICATION_JSON)
 public class BoardInvitesResource {
 
-    @Inject
-    BoardsRepository boardsRepository;
 
     @Inject
     InvitesRepository invitesRepository;
@@ -43,17 +40,16 @@ public class BoardInvitesResource {
     @Inject
     SecurityIdentity identity;
 
+    @Inject
+    BoardGuards boardGuards;
+
     @POST
     @Path("/{boardId}/invites")
     public Response createInvite(@PathParam("boardId") String boardId, CreateInviteRequest req) {
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
 
-        Board board = boardsRepository.findById(boardId).orElseThrow(NotFoundException::new);
-        // Do not leak existence
-        if (!board.ownerUserId().equals(userId) || "deleted".equals(board.status())) {
-            throw new NotFoundException();
-        }
+        boardGuards.requireOwner(boardId, userId);
 
         String permission = req == null ? null : req.permission();
         if (permission == null || permission.isBlank()) {
@@ -112,10 +108,7 @@ public class BoardInvitesResource {
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
 
-        Board board = boardsRepository.findById(boardId).orElseThrow(NotFoundException::new);
-        if (!board.ownerUserId().equals(userId) || "deleted".equals(board.status())) {
-            throw new NotFoundException();
-        }
+        boardGuards.requireOwner(boardId, userId);
 
         return invitesRepository.listForBoard(boardId).stream()
                 .map(InviteResponse::from)
@@ -128,10 +121,7 @@ public class BoardInvitesResource {
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
 
-        Board board = boardsRepository.findById(boardId).orElseThrow(NotFoundException::new);
-        if (!board.ownerUserId().equals(userId) || "deleted".equals(board.status())) {
-            throw new NotFoundException();
-        }
+        boardGuards.requireOwner(boardId, userId);
 
         Invite invite = invitesRepository.findById(inviteId).orElseThrow(NotFoundException::new);
         if (!invite.boardId().equals(boardId)) {

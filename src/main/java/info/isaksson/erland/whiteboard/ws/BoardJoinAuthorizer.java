@@ -4,18 +4,14 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
 import info.isaksson.erland.whiteboard.domain.Board;
-import info.isaksson.erland.whiteboard.persistence.BoardsRepository;
-import info.isaksson.erland.whiteboard.security.BoardAccessService;
+import info.isaksson.erland.whiteboard.security.BoardGuards;
 import info.isaksson.erland.whiteboard.security.InvitePolicy;
 
 @ApplicationScoped
 public class BoardJoinAuthorizer {
 
     @Inject
-    BoardsRepository boardsRepository;
-
-    @Inject
-    BoardAccessService boardAccess;
+    BoardGuards boardGuards;
 
     @Inject
     InvitePolicy invitePolicy;
@@ -34,8 +30,8 @@ public class BoardJoinAuthorizer {
      * This intentionally avoids leaking board existence via different error messages.
      */
     public JoinDecision authorize(String boardId, String userId, String inviteToken) {
-        Board board = boardsRepository.findById(boardId).orElse(null);
-        if (board == null || "deleted".equals(board.status())) {
+        Board board = boardGuards.findExistingNotDeleted(boardId).orElse(null);
+        if (board == null) {
             return new JoinDecision(false, "NOT_ALLOWED", null, null);
         }
 
@@ -45,10 +41,12 @@ public class BoardJoinAuthorizer {
             }
 
             // Shared access (viewer/editor)
-            if (boardAccess != null) {
-                var access = boardAccess.findAccess(boardId, userId).orElse(null);
-                if (access != null && access.canRead()) {
+            if (boardGuards != null) {
+                try {
+                    var access = boardGuards.requireReadableAccess(boardId, userId);
                     return new JoinDecision(true, "OK", userId, access.role());
+                } catch (jakarta.ws.rs.NotFoundException ignored) {
+                    // fall through to NOT_ALLOWED
                 }
             }
 
