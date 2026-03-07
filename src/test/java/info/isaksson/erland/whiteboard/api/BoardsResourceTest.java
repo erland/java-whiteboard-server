@@ -185,6 +185,30 @@ public class BoardsResourceTest {
     }
 
     @Test
+    @TestSecurity(user = "alice", roles = { "whiteboard-user" })
+    void update_returns_conflict_for_archived_board() {
+        String id = UUID.randomUUID().toString();
+        boardsRepository.create(new Board(
+                id,
+                "Archived",
+                "whiteboard",
+                "advanced",
+                "alice",
+                "archived",
+                null,
+                null
+        ));
+
+        given()
+          .contentType("application/json")
+          .body("{\"name\":\"Renamed\"}")
+          .when().patch("/api/boards/" + id)
+          .then()
+             .statusCode(409)
+             .body("code", is("BOARD_NOT_ACTIVE"));
+    }
+
+    @Test
     @TestSecurity(user = "bob", roles = { "whiteboard-user" })
     void other_user_gets_404_for_board_they_dont_own() {
         String id = UUID.randomUUID().toString();

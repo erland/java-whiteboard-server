@@ -19,10 +19,11 @@ import info.isaksson.erland.whiteboard.api.dto.BoardResponse;
 import info.isaksson.erland.whiteboard.api.dto.CreateBoardRequest;
 import info.isaksson.erland.whiteboard.api.dto.UpdateBoardRequest;
 import info.isaksson.erland.whiteboard.domain.Board;
+import info.isaksson.erland.whiteboard.domain.BoardMetadataRules;
 import info.isaksson.erland.whiteboard.persistence.BoardsRepository;
+import info.isaksson.erland.whiteboard.security.Authz;
 import info.isaksson.erland.whiteboard.security.BoardAccessService;
 import info.isaksson.erland.whiteboard.security.BoardGuards;
-import info.isaksson.erland.whiteboard.security.Authz;
 import io.quarkus.security.identity.SecurityIdentity;
 
 @Path("/api/boards")
@@ -30,18 +31,21 @@ import io.quarkus.security.identity.SecurityIdentity;
 @Consumes(MediaType.APPLICATION_JSON)
 public class BoardsResource {
 
-    private static final String DEFAULT_BOARD_KIND = "whiteboard";
-    private static final String DEFAULT_BOARD_TYPE = "advanced";
-
     private final BoardsRepository boardsRepository;
     private final BoardAccessService boardAccess;
     private final BoardGuards boardGuards;
+    private final BoardMetadataRules boardMetadataRules;
     private final SecurityIdentity identity;
 
-    public BoardsResource(BoardsRepository boardsRepository, BoardAccessService boardAccess, BoardGuards boardGuards, SecurityIdentity identity) {
+    public BoardsResource(BoardsRepository boardsRepository,
+                          BoardAccessService boardAccess,
+                          BoardGuards boardGuards,
+                          BoardMetadataRules boardMetadataRules,
+                          SecurityIdentity identity) {
         this.boardsRepository = boardsRepository;
         this.boardAccess = boardAccess;
         this.boardGuards = boardGuards;
+        this.boardMetadataRules = boardMetadataRules;
         this.identity = identity;
     }
 
@@ -58,26 +62,11 @@ public class BoardsResource {
     public Response create(CreateBoardRequest req) {
         Authz.requireUserOrAdmin(identity);
 
-        String name = req == null ? null : req.name();
-        String rawType = req == null ? null : req.type();
-        String rawBoardType = req == null ? null : req.boardType();
-        String type = normalizeBoardKind(rawType);
-        String boardType = normalizeBoardType(rawBoardType, rawType);
-
-        if (name == null || name.isBlank()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new info.isaksson.erland.whiteboard.api.errors.ApiError("VALIDATION_ERROR", "Field 'name' is required."))
-                    .build();
-        }
-        if (rawType == null || rawType.isBlank()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new info.isaksson.erland.whiteboard.api.errors.ApiError("VALIDATION_ERROR", "Field 'type' is required."))
-                    .build();
-        }
-        if (boardType == null || boardType.isBlank()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new info.isaksson.erland.whiteboard.api.errors.ApiError("VALIDATION_ERROR", "Field 'boardType' is required."))
-                    .build();
+        BoardMetadataRules.NormalizedCreate normalized;
+        try {
+            normalized = boardMetadataRules.normalizeCreate(req);
+        } catch (BoardMetadataRules.ValidationException e) {
+            return validationError(e.getMessage());
         }
 
         String userId = Authz.userId(identity);
@@ -85,11 +74,11 @@ public class BoardsResource {
 
         Board created = boardsRepository.create(new Board(
                 id,
-                name.trim(),
-                type,
-                boardType,
+                normalized.name(),
+                normalized.type(),
+                normalized.boardType(),
                 userId,
-                "active",
+                BoardMetadataRules.STATUS_ACTIVE,
                 null,
                 null
         ));
@@ -116,24 +105,22 @@ public class BoardsResource {
         String userId = Authz.userId(identity);
 
         Board existing = boardGuards.requireWritableAccess(id, userId).board();
-        if (!"active".equals(existing.status())) {
+
+        BoardMetadataRules.NormalizedUpdate normalized;
+        try {
+            normalized = boardMetadataRules.normalizeUpdate(req, existing);
+        } catch (BoardMetadataRules.BoardNotActiveException e) {
             return Response.status(Response.Status.CONFLICT)
-                    .entity(new info.isaksson.erland.whiteboard.api.errors.ApiError("BOARD_NOT_ACTIVE", "Board is not active."))
+                    .entity(new info.isaksson.erland.whiteboard.api.errors.ApiError("BOARD_NOT_ACTIVE", e.getMessage()))
                     .build();
         }
 
-        String name = req == null ? null : req.name();
-        String newName = (name == null || name.isBlank()) ? existing.name() : name.trim();
-        String newType = normalizeBoardKind(req == null ? null : req.type());
-        if (newType == null || newType.isBlank()) {
-            newType = existing.type();
-        }
-        String newBoardType = normalizeBoardType(req == null ? null : req.boardType(), req == null ? null : req.type());
-        if (newBoardType == null || newBoardType.isBlank()) {
-            newBoardType = existing.boardType();
-        }
-
-        Board updated = boardsRepository.updateMetadata(id, userId, newName, newType, newBoardType);
+        Board updated = boardsRepository.updateMetadata(
+                id,
+                userId,
+                normalized.name(),
+                normalized.type(),
+                normalized.boardType());
         if (updated == null) {
             throw new NotFoundException();
         }
@@ -156,24 +143,9 @@ public class BoardsResource {
         return Response.noContent().build();
     }
 
-    private static String normalizeBoardKind(String requestedType) {
-        if (requestedType == null || requestedType.isBlank()) {
-            return DEFAULT_BOARD_KIND;
-        }
-        return DEFAULT_BOARD_KIND;
+    private static Response validationError(String message) {
+        return Response.status(Response.Status.BAD_REQUEST)
+                .entity(new info.isaksson.erland.whiteboard.api.errors.ApiError("VALIDATION_ERROR", message))
+                .build();
     }
-
-    private static String normalizeBoardType(String requestedBoardType, String requestedType) {
-        if (requestedBoardType != null && !requestedBoardType.isBlank()) {
-            return requestedBoardType.trim();
-        }
-        if (requestedType != null && !requestedType.isBlank()) {
-            String trimmedType = requestedType.trim();
-            if (!DEFAULT_BOARD_KIND.equals(trimmedType)) {
-                return trimmedType;
-            }
-        }
-        return DEFAULT_BOARD_TYPE;
-    }
-
 }
