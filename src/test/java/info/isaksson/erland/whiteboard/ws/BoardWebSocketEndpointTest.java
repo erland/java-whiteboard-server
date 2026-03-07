@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import info.isaksson.erland.whiteboard.domain.BoardSnapshot;
 import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import jakarta.websocket.CloseReason;
 
 class BoardWebSocketEndpointTest {
 
@@ -72,6 +73,49 @@ class BoardWebSocketEndpointTest {
     }
 
     @Test
+    void onOpen_whenBoardConnectionLimitReached_closesNewestSession() {
+        BoardWebSocketEndpoint endpoint = newEndpoint();
+        endpoint.limits.maxConnectionsPerBoard = 1;
+
+        TestWsSupport.TestSessionState first = openSession(endpoint, "board-1", "alice", "editor");
+        TestWsSupport.TestSessionState second = TestWsSupport.newSession("ws://localhost/ws/boards/board-1");
+
+        endpoint.onOpen(second.session, "board-1");
+
+        assertNull(first.closeReason);
+        assertNotNull(second.closeReason);
+        assertEquals(CloseReason.CloseCodes.TRY_AGAIN_LATER, second.closeReason.getCloseCode());
+        assertEquals("Board connection limit reached", second.closeReason.getReasonPhrase());
+        assertTrue(second.sentTexts.isEmpty());
+    }
+
+    @Test
+    void onClose_removesPresenceAndBroadcastsUpdatedPresence() throws Exception {
+        BoardWebSocketEndpoint endpoint = newEndpoint();
+        TestWsSupport.TestSessionState alice = openSession(endpoint, "board-1", "alice", "editor");
+        TestWsSupport.TestSessionState bob = openSession(endpoint, "board-1", "bob", "viewer");
+
+        endpoint.onClose(alice.session, new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "bye"));
+
+        JsonNode lastBobMessage = mapper.readTree(bob.sentTexts.get(bob.sentTexts.size() - 1));
+        assertEquals("presence", lastBobMessage.get("type").asText());
+        assertEquals(1, lastBobMessage.withArray("users").size());
+        assertEquals("bob", lastBobMessage.withArray("users").get(0).get("userId").asText());
+    }
+
+    @Test
+    void onError_closesSessionWithUnexpectedCondition() {
+        BoardWebSocketEndpoint endpoint = newEndpoint();
+        TestWsSupport.TestSessionState state = openSession(endpoint, "board-1", "alice", "editor");
+
+        endpoint.onError(state.session, new IllegalStateException("boom"));
+
+        assertNotNull(state.closeReason);
+        assertEquals(CloseReason.CloseCodes.UNEXPECTED_CONDITION, state.closeReason.getCloseCode());
+        assertEquals("Error", state.closeReason.getReasonPhrase());
+    }
+
+    @Test
     void onMessage_invalidJson_returnsBadRequestError() throws Exception {
         BoardWebSocketEndpoint endpoint = newEndpoint();
         TestWsSupport.TestSessionState state = openSession(endpoint, "board-1", "alice", "editor");
@@ -82,6 +126,21 @@ class BoardWebSocketEndpointTest {
         JsonNode error = mapper.readTree(state.sentTexts.get(2));
         assertEquals("error", error.get("type").asText());
         assertEquals("BAD_REQUEST", error.get("code").asText());
+    }
+
+    @Test
+    void onMessage_rateLimited_returnsRateLimitedError() throws Exception {
+        BoardWebSocketEndpoint endpoint = newEndpoint();
+        endpoint.limits.ratePerSecond = 1;
+        endpoint.limits.burst = 1;
+        TestWsSupport.TestSessionState state = openSession(endpoint, "board-1", "alice", "editor");
+
+        endpoint.onMessage("{\"type\":\"ping\"}", state.session);
+        endpoint.onMessage("{\"type\":\"ping\"}", state.session);
+
+        JsonNode error = mapper.readTree(state.sentTexts.get(state.sentTexts.size() - 1));
+        assertEquals("error", error.get("type").asText());
+        assertEquals("RATE_LIMITED", error.get("code").asText());
     }
 
     @Test
