@@ -81,6 +81,17 @@ TOKEN="$(curl -s \
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/me | jq
 ```
 
+## Test edge deployment configuration
+
+The repo-based test edge setup is intended to run from published container images rather than local builds.
+
+By default `docker-compose.edge.test.yml` uses:
+- `ghcr.io/erland/pwa-whiteboard:latest`
+- `ghcr.io/erland/java-whiteboard-server:latest`
+- official upstream images for Nginx, Postgres, and Keycloak
+
+You can override image references and public host settings through `.env` variables. See `.env.example` for the supported values.
+
 ## API documentation
 
 ### REST API documentation
@@ -96,6 +107,8 @@ mvn quarkus:dev
 ### WebSocket protocol documentation
 The WebSocket protocol is documented separately in:
 - `docs/websocket-protocol.md`
+- Repo-based test deployment guide: `deploy/test/DEPLOY.md`
+- Test deployment verification guide: `deploy/test/VERIFY.md`
 
 ### Documentation navigation
 Additional project documentation:
@@ -182,6 +195,12 @@ The recommended setup is to run an "edge" nginx container that acts as a single 
 
 This keeps everything on a single origin (`http://localhost/...`) and avoids CORS + redirect URI confusion.
 
+The test edge setup is also intended to work on a remote plain-HTTP host by setting `PUBLIC_BASE_URL` to the public host URL, for example `http://serverxxx`.
+
+For the test edge stack, the PWA runtime config is rendered by `edge-nginx` at container startup. Its OIDC issuer is derived from `PUBLIC_BASE_URL`, so `/pwa-whiteboard/config.json` stays aligned with the same public host used for `/auth/...` in both local and remote test deployments.
+
+The backend test deployment is aligned the same way: REST token issuer checks and WebSocket bearer-token verification both use the browser-visible issuer derived from `PUBLIC_BASE_URL`, while JWKS is still fetched over the internal Docker network through `edge-nginx`. This keeps backend token validation aligned with the same public host seen by the browser without forcing the server container to call `localhost`.
+
 ### Dev edge stack (contributors)
 
 Run only infra in Docker (nginx + postgres + keycloak), while you run Quarkus + Vite on the host.
@@ -208,15 +227,44 @@ Then open:
 
 ### Test edge stack ("just run it" on a VM)
 
-Runs everything in Docker, using GHCR images:
+Runs everything in Docker, using GHCR images.
 
+#### Local tryout at `http://localhost/*`
+1. Copy the example environment file:
 ```bash
+cp .env.example .env
+```
+2. Keep `PUBLIC_BASE_URL=http://localhost` in `.env`.
+3. Start the stack:
+```bash
+docker compose -f docker-compose.edge.test.yml pull
 docker compose -f docker-compose.edge.test.yml up -d
 ```
+4. Open:
+- App: `http://localhost/pwa-whiteboard/`
+- Keycloak: `http://localhost/auth/`
 
-Then open:
-- App: `http://<host>/pwa-whiteboard/`
-- Keycloak: `http://<host>/auth/`
+#### Remote test server at `http://serverxxx/*`
+1. Clone the repo on the remote host.
+2. Copy the example environment file:
+```bash
+cp .env.example .env
+```
+3. Update `.env` so `PUBLIC_BASE_URL` matches the public host, for example:
+```dotenv
+PUBLIC_BASE_URL=http://serverxxx
+```
+4. Start the stack:
+```bash
+docker compose -f docker-compose.edge.test.yml pull
+docker compose -f docker-compose.edge.test.yml up -d
+```
+5. Open:
+- App: `http://serverxxx/pwa-whiteboard/`
+- Keycloak: `http://serverxxx/auth/`
+
+A more detailed repo-based deployment walkthrough is available in:
+- `deploy/test/DEPLOY.md`
 
 > For production-like deployments you’ll typically put TLS in front of `edge-nginx` (or replace it with a TLS-capable reverse proxy).
 

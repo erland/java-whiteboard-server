@@ -1,12 +1,19 @@
 services:
   edge-nginx:
-    image: nginx:1.27-alpine
+    image: ${EDGE_NGINX_IMAGE:-nginx:1.27-alpine}
     container_name: whiteboard-edge-nginx
+    entrypoint: ["/bin/sh", "-lc"]
+    command: >
+      OIDC_ISSUER="$$PUBLIC_BASE_URL/auth/realms/whiteboard";
+      sed -e "s|__PUBLIC_BASE_URL__|$$PUBLIC_BASE_URL|g" -e "s|__OIDC_ISSUER__|$$OIDC_ISSUER|g" /etc/nginx/pwa-whiteboard/config.json.template > /etc/nginx/pwa-whiteboard/config.json
+      && exec nginx -g 'daemon off;'
+    environment:
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
     ports:
       - "80:80"
     volumes:
       - ./deploy/test/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./deploy/test/pwa-whiteboard/config.json:/etc/nginx/pwa-whiteboard/config.json:ro
+      - ./deploy/test/pwa-whiteboard/config.json.template:/etc/nginx/pwa-whiteboard/config.json.template:ro
     depends_on:
       server:
         condition: service_started
@@ -17,16 +24,13 @@ services:
 
   # ----- PWA -----
   pwa:
-    image: ghcr.io/erland/pwa-whiteboard:latest
+    image: ${PWA_IMAGE:-ghcr.io/erland/pwa-whiteboard:latest}
     container_name: pwa-whiteboard
     restart: unless-stopped
 
   # ----- API server -----
   server:
-    image: ghcr.io/erland/java-whiteboard-server:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${SERVER_IMAGE:-ghcr.io/erland/java-whiteboard-server:latest}
     container_name: whiteboard-server
     environment:
       QUARKUS_PROFILE: prod
@@ -39,10 +43,15 @@ services:
       QUARKUS_OIDC_AUTH_SERVER_URL: http://edge-nginx/auth/realms/whiteboard
       QUARKUS_OIDC_DISCOVERY_ENABLED: "false"
       QUARKUS_OIDC_JWKS_PATH: http://edge-nginx/auth/realms/whiteboard/protocol/openid-connect/certs
-      QUARKUS_OIDC_TOKEN_ISSUER: http://localhost/auth/realms/whiteboard
+      QUARKUS_OIDC_TOKEN_ISSUER: ${PUBLIC_BASE_URL:-http://localhost}/auth/realms/whiteboard
       QUARKUS_OIDC_CLIENT_ID: whiteboard-server
       QUARKUS_OIDC_APPLICATION_TYPE: service
       QUARKUS_OIDC_TLS_VERIFICATION: none
+
+      # WebSocket bearer-token verification must match the browser-visible issuer,
+      # while the JWKS endpoint stays reachable on the internal Docker network.
+      MP_JWT_VERIFY_ISSUER: ${PUBLIC_BASE_URL:-http://localhost}/auth/realms/whiteboard
+      MP_JWT_VERIFY_PUBLICKEY_LOCATION: http://edge-nginx/auth/realms/whiteboard/protocol/openid-connect/certs
 
       # behind reverse proxy
       QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING: "true"
@@ -56,7 +65,7 @@ services:
 
   # ----- Postgres (API) -----
   postgres:
-    image: postgres:16
+    image: ${POSTGRES_IMAGE:-postgres:16}
     container_name: whiteboard-server-postgres
     environment:
       POSTGRES_DB: whiteboard
@@ -74,19 +83,23 @@ services:
 
   # ----- Keycloak -----
   keycloak:
-    image: quay.io/keycloak/keycloak:25.0
+    image: ${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:25.0}
     container_name: whiteboard-server-keycloak
-    command: ["start-dev", "--import-realm"]
+    entrypoint: ["/bin/sh", "-lc"]
+    command: >
+      sed "s|__PUBLIC_BASE_URL__|$$PUBLIC_BASE_URL|g" /opt/keycloak/data/import/realm-whiteboard.json.template > /opt/keycloak/data/import/realm-whiteboard.json
+      && exec /opt/keycloak/bin/kc.sh start-dev --import-realm
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_HTTP_RELATIVE_PATH: /auth
       KC_PROXY: edge
-      KC_HOSTNAME_STRICT: "false"
-      KC_HOSTNAME: localhost
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME: ${PUBLIC_BASE_URL:-http://localhost}/auth
       KC_PROXY_HEADERS: xforwarded
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
     volumes:
-      - ./deploy/test/keycloak/realm-whiteboard.json:/opt/keycloak/data/import/realm-whiteboard.json:ro
+      - ./deploy/test/keycloak/realm-whiteboard.json.template:/opt/keycloak/data/import/realm-whiteboard.json.template:ro
     healthcheck:
       test: ["CMD-SHELL", "sh -lc '(command -v curl >/dev/null && curl -fsS http://localhost:8080/auth/realms/whiteboard/.well-known/openid-configuration) || (command -v wget >/dev/null && wget -qO- http://localhost:8080/auth/realms/whiteboard/.well-known/openid-configuration >/dev/null)'"]
       interval: 5s

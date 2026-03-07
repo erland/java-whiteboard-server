@@ -17,3 +17,8 @@ The realtime protocol is documented separately in:
 - `functional-specification.md`
 - `development-plan.md`
 - `websocket-protocol.md`
+
+## Deployment documentation
+- `../deploy/test/DEPLOY.md`
+
+- Repo-based test deployment verification: `../deploy/test/VERIFY.md`

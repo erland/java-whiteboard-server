@@ -1,0 +1,9 @@
+{
+  "apiBaseUrl": "/api",
+  "wsBaseUrl": "",
+  "oidc": {
+    "issuer": "__OIDC_ISSUER__",
+    "clientId": "whiteboard-pwa",
+    "scope": "openid profile email"
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "realm": "whiteboard",
+  "enabled": true,
+  "displayName": "Whiteboard Test Realm",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "sslRequired": "none",
+  "roles": {
+    "realm": [
+      {
+        "name": "whiteboard-user",
+        "description": "Basic whiteboard user"
+      },
+      {
+        "name": "whiteboard-admin",
+        "description": "Whiteboard admin"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "whiteboard-pwa",
+      "name": "Whiteboard PWA (test)",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "__PUBLIC_BASE_URL__/pwa-whiteboard/*",
+        "__PUBLIC_BASE_URL__/*",
+        "http://localhost:5173/*",
+        "http://localhost:5173/pwa-whiteboard/*",
+        "http://localhost:8080/*",
+        "http://localhost:8080/pwa-whiteboard/*"
+      ],
+      "webOrigins": [
+        "__PUBLIC_BASE_URL__",
+        "http://localhost:5173",
+        "http://localhost:8080"
+      ]
+    },
+    {
+      "clientId": "whiteboard-server",
+      "name": "Whiteboard Server (resource server)",
+      "enabled": true,
+      "publicClient": true,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": false,
+      "serviceAccountsEnabled": false
+    }
+  ],
+  "users": [
+    {
+      "username": "alice",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Alice",
+      "lastName": "Dev",
+      "email": "alice@example.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "alice",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "whiteboard-user"
+      ]
+    },
+    {
+      "username": "bob",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Bob",
+      "lastName": "Dev",
+      "email": "bob@example.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "bob",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "whiteboard-user"
+      ]
+    },
+    {
+      "username": "admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Admin",
+      "lastName": "Dev",
+      "email": "admin@example.test",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "admin",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "whiteboard-admin",
+        "whiteboard-user"
+      ]
+    }
+  ]
+}
