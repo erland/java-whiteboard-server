@@ -1,9 +1,0 @@
-{
-  "apiBaseUrl": "/api",
-  "wsBaseUrl": "",
-  "oidc": {
-    "issuer": "http://localhost/auth/realms/whiteboard",
-    "clientId": "whiteboard-pwa",
-    "scope": "openid profile email"
-  }
-}
