@@ -3,7 +3,6 @@ package info.isaksson.erland.whiteboard.persistence;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,7 +37,7 @@ public class JdbcBoardsRepository implements BoardsRepository {
             }
             return findById(board.id()).orElseThrow(() -> new IllegalStateException("Inserted board not found"));
         } catch (Exception e) {
-            throw new RuntimeException("Failed to create board", e);
+            throw JdbcSupport.failure("create board", e);
         }
     }
 
@@ -57,7 +56,7 @@ public class JdbcBoardsRepository implements BoardsRepository {
                 return out;
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to list boards", e);
+            throw JdbcSupport.failure("list boards", e);
         }
     }
 
@@ -72,7 +71,7 @@ public class JdbcBoardsRepository implements BoardsRepository {
                 return Optional.of(map(rs));
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to find board", e);
+            throw JdbcSupport.failure("find board", e);
         }
     }
 
@@ -94,7 +93,7 @@ public class JdbcBoardsRepository implements BoardsRepository {
             }
             return findById(id).orElse(null);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to update board", e);
+            throw JdbcSupport.failure("update board", e);
         }
     }
 
@@ -109,13 +108,13 @@ public class JdbcBoardsRepository implements BoardsRepository {
             int updated = ps.executeUpdate();
             return updated > 0;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to archive board", e);
+            throw JdbcSupport.failure("archive board", e);
         }
     }
 
     private static Board map(ResultSet rs) throws Exception {
-        Instant createdAt = toInstant(rs.getTimestamp("created_at"));
-        Instant updatedAt = toInstant(rs.getTimestamp("updated_at"));
+        Instant createdAt = JdbcSupport.getInstant(rs, "created_at");
+        Instant updatedAt = JdbcSupport.getInstant(rs, "updated_at");
         return new Board(
                 rs.getString("id"),
                 rs.getString("name"),
@@ -128,7 +127,4 @@ public class JdbcBoardsRepository implements BoardsRepository {
         );
     }
 
-    private static Instant toInstant(Timestamp ts) {
-        return ts == null ? null : ts.toInstant();
-    }
 }

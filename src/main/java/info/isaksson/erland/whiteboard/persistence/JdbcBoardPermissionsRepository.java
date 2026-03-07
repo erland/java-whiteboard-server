@@ -1,11 +1,9 @@
 package info.isaksson.erland.whiteboard.persistence;
 
 import io.quarkus.arc.profile.UnlessBuildProfile;
-import io.quarkus.logging.Log;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
-import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -17,12 +15,8 @@ import java.util.Optional;
 @UnlessBuildProfile("test")
 public class JdbcBoardPermissionsRepository implements BoardPermissionsRepository {
 
-    private final DataSource dataSource;
-
     @Inject
-    public JdbcBoardPermissionsRepository(DataSource dataSource) {
-        this.dataSource = dataSource;
-    }
+    io.agroal.api.AgroalDataSource dataSource;
 
     @Override
     public void upsert(String boardId, String userId, String role) {
@@ -40,8 +34,7 @@ public class JdbcBoardPermissionsRepository implements BoardPermissionsRepositor
             ps.setString(3, role);
             ps.executeUpdate();
         } catch (Exception e) {
-            Log.error("Failed to upsert board permission", e);
-            throw new RuntimeException(e);
+            throw JdbcSupport.failure("upsert board permission", e);
         }
     }
 
@@ -57,8 +50,7 @@ public class JdbcBoardPermissionsRepository implements BoardPermissionsRepositor
                 return Optional.ofNullable(rs.getString("role"));
             }
         } catch (Exception e) {
-            Log.error("Failed to find board role", e);
-            throw new RuntimeException(e);
+            throw JdbcSupport.failure("find board role", e);
         }
     }
 
@@ -76,8 +68,7 @@ public class JdbcBoardPermissionsRepository implements BoardPermissionsRepositor
                 return out;
             }
         } catch (Exception e) {
-            Log.error("Failed to list board ids for user", e);
-            throw new RuntimeException(e);
+            throw JdbcSupport.failure("list board ids for user", e);
         }
     }
 }

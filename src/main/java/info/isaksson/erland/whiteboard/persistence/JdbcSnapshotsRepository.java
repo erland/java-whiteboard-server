@@ -3,7 +3,6 @@ package info.isaksson.erland.whiteboard.persistence;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -49,8 +48,7 @@ public class JdbcSnapshotsRepository implements SnapshotsRepository {
                     ps.setString(1, boardId);
                     ps.setLong(2, nextVersion);
                     ps.setObject(3, jsonb);
-                    if (createdBy == null) ps.setNull(4, java.sql.Types.VARCHAR);
-                    else ps.setString(4, createdBy);
+                    JdbcSupport.setNullableString(ps, 4, createdBy);
                     ps.executeUpdate();
                 }
 
@@ -72,7 +70,7 @@ public class JdbcSnapshotsRepository implements SnapshotsRepository {
                 c.setAutoCommit(true);
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to create snapshot", e);
+            throw JdbcSupport.failure("create snapshot", e);
         }
     }
 
@@ -89,7 +87,7 @@ public class JdbcSnapshotsRepository implements SnapshotsRepository {
                 return Optional.of(map(rs));
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to get snapshot", e);
+            throw JdbcSupport.failure("get snapshot", e);
         }
     }
 
@@ -106,7 +104,7 @@ public class JdbcSnapshotsRepository implements SnapshotsRepository {
                 return Optional.of(map(rs));
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to get latest snapshot", e);
+            throw JdbcSupport.failure("get latest snapshot", e);
         }
     }
 
@@ -122,7 +120,7 @@ public class JdbcSnapshotsRepository implements SnapshotsRepository {
                 return out;
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to list snapshot versions", e);
+            throw JdbcSupport.failure("list snapshot versions", e);
         }
     }
 
@@ -131,12 +129,9 @@ public class JdbcSnapshotsRepository implements SnapshotsRepository {
                 rs.getString("board_id"),
                 rs.getLong("version"),
                 rs.getString("snapshot_json"),
-                toInstant(rs.getTimestamp("created_at")),
+                JdbcSupport.getInstant(rs, "created_at"),
                 rs.getString("created_by")
         );
     }
 
-    private static Instant toInstant(Timestamp ts) {
-        return ts == null ? null : ts.toInstant();
-    }
 }

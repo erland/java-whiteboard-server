@@ -3,7 +3,6 @@ package info.isaksson.erland.whiteboard.persistence;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,15 +32,13 @@ public class JdbcInvitesRepository implements InvitesRepository {
                 ps.setString(2, invite.tokenHash());
                 ps.setString(3, invite.boardId());
                 ps.setString(4, invite.permission());
-                if (invite.expiresAt() == null) ps.setNull(5, java.sql.Types.TIMESTAMP_WITH_TIMEZONE);
-                else ps.setTimestamp(5, Timestamp.from(invite.expiresAt()));
-                if (invite.maxUses() == null) ps.setNull(6, java.sql.Types.INTEGER);
-                else ps.setInt(6, invite.maxUses());
+                JdbcSupport.setNullableTimestamp(ps, 5, invite.expiresAt());
+                JdbcSupport.setNullableInteger(ps, 6, invite.maxUses());
                 ps.executeUpdate();
             }
             return findById(invite.id()).orElseThrow(() -> new IllegalStateException("Inserted invite not found"));
         } catch (Exception e) {
-            throw new RuntimeException("Failed to create invite", e);
+            throw JdbcSupport.failure("create invite", e);
         }
     }
 
@@ -58,7 +55,7 @@ public class JdbcInvitesRepository implements InvitesRepository {
                 return out;
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to list invites", e);
+            throw JdbcSupport.failure("list invites", e);
         }
     }
 
@@ -74,7 +71,7 @@ public class JdbcInvitesRepository implements InvitesRepository {
                 return Optional.of(map(rs));
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to find invite", e);
+            throw JdbcSupport.failure("find invite", e);
         }
     }
 
@@ -90,7 +87,7 @@ public class JdbcInvitesRepository implements InvitesRepository {
                 return Optional.of(map(rs));
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to find invite by token hash", e);
+            throw JdbcSupport.failure("find invite by token hash", e);
         }
     }
 
@@ -102,7 +99,7 @@ public class JdbcInvitesRepository implements InvitesRepository {
             ps.setString(1, inviteId);
             return ps.executeUpdate() > 0;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to revoke invite", e);
+            throw JdbcSupport.failure("revoke invite", e);
         }
     }
 
@@ -118,7 +115,7 @@ public class JdbcInvitesRepository implements InvitesRepository {
                 }
             }
         } catch (Exception e) {
-            throw new RuntimeException("Failed to increment invite uses", e);
+            throw JdbcSupport.failure("increment invite uses", e);
         }
     }
 
@@ -128,15 +125,12 @@ public class JdbcInvitesRepository implements InvitesRepository {
                 rs.getString("board_id"),
                 rs.getString("token_hash"),
                 rs.getString("permission"),
-                toInstant(rs.getTimestamp("expires_at")),
+                JdbcSupport.getInstant(rs, "expires_at"),
                 (Integer) rs.getObject("max_uses"),
                 rs.getInt("uses"),
-                toInstant(rs.getTimestamp("revoked_at")),
-                toInstant(rs.getTimestamp("created_at"))
+                JdbcSupport.getInstant(rs, "revoked_at"),
+                JdbcSupport.getInstant(rs, "created_at")
         );
     }
 
-    private static Instant toInstant(Timestamp ts) {
-        return ts == null ? null : ts.toInstant();
-    }
 }
