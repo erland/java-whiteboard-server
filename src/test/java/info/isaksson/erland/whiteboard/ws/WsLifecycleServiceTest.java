@@ -26,15 +26,17 @@ class WsLifecycleServiceTest {
     void open_registersPresenceAndSendsJoinedAndPresence() throws Exception {
         WsSessionRegistry sessionRegistry = new WsSessionRegistry();
         PresenceHub presenceHub = new PresenceHub();
+        FixedSnapshotsRepository snapshots = new FixedSnapshotsRepository(
+                new BoardSnapshot("board-1", 2L, "{\"shapes\":[\"x\"]}", Instant.parse("2026-01-01T10:15:30Z"), "alice"));
+        WsMetrics metrics = new WsMetrics(new SimpleMeterRegistry());
         WsLifecycleService service = new WsLifecycleService(
                 new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
                 new WsAuthResolver(null),
                 sessionRegistry,
                 presenceHub,
-                new FixedSnapshotsRepository(new BoardSnapshot("board-1", 2L, "{\"shapes\":[\"x\"]}", Instant.parse("2026-01-01T10:15:30Z"), "alice")),
                 limits(),
-                new WsMetrics(new SimpleMeterRegistry()),
-                new WsOutboundSupport(mapper, new FixedSnapshotsRepository(new BoardSnapshot("board-1", 2L, "{\"shapes\":[\"x\"]}", Instant.parse("2026-01-01T10:15:30Z"), "alice")), presenceHub, sessionRegistry, new WsMetrics(new SimpleMeterRegistry())));
+                metrics,
+                new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
 
         TestWsSupport.TestSessionState state = TestWsSupport.newSession(URI.create("ws://localhost/ws/boards/board-1"), Map.of(), null);
         state.session.getUserProperties().put(WsHandshakeConfigurator.PROP_CORRELATION_ID, "corr-1");
@@ -56,31 +58,30 @@ class WsLifecycleServiceTest {
         PresenceHub presenceHub = new PresenceHub();
         FixedSnapshotsRepository snapshots = new FixedSnapshotsRepository(null);
         WsMetrics metrics = new WsMetrics(new SimpleMeterRegistry());
-        WsLifecycleService service = new WsLifecycleService(
+        WsOutboundSupport outboundSupport = new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics);
+        WsLifecycleService aliceService = new WsLifecycleService(
                 new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
                 new WsAuthResolver(null),
                 sessionRegistry,
                 presenceHub,
-                snapshots,
                 limits(),
                 metrics,
-                new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
-
-        TestWsSupport.TestSessionState alice = TestWsSupport.newSession("ws://localhost/ws/boards/board-1");
-        TestWsSupport.TestSessionState bob = TestWsSupport.newSession("ws://localhost/ws/boards/board-1");
-        service.open(alice.session, "board-1");
-        service = new WsLifecycleService(
+                outboundSupport);
+        WsLifecycleService bobService = new WsLifecycleService(
                 new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "bob", "viewer")),
                 new WsAuthResolver(null),
                 sessionRegistry,
                 presenceHub,
-                snapshots,
                 limits(),
                 metrics,
-                new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
-        service.open(bob.session, "board-1");
+                outboundSupport);
 
-        service.close(alice.session, new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "bye"));
+        TestWsSupport.TestSessionState alice = TestWsSupport.newSession("ws://localhost/ws/boards/board-1");
+        TestWsSupport.TestSessionState bob = TestWsSupport.newSession("ws://localhost/ws/boards/board-1");
+        aliceService.open(alice.session, "board-1");
+        bobService.open(bob.session, "board-1");
+
+        bobService.close(alice.session, new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "bye"));
 
         assertEquals(1, sessionRegistry.connectionCount("board-1"));
         JsonNode lastBob = mapper.readTree(bob.sentTexts.get(bob.sentTexts.size() - 1));

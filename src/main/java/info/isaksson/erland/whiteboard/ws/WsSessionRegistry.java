@@ -3,9 +3,11 @@ package info.isaksson.erland.whiteboard.ws;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.websocket.Session;
 
-final class WsSessionRegistry {
+@ApplicationScoped
+class WsSessionRegistry {
 
     private final ConcurrentHashMap<String, ConcurrentHashMap<String, Session>> boardSessions = new ConcurrentHashMap<>();
 

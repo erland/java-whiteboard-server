@@ -4,17 +4,21 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.Principal;
 
+import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Instance;
+import jakarta.inject.Inject;
 import jakarta.websocket.Session;
 
 import org.eclipse.microprofile.jwt.JsonWebToken;
 
 import io.smallrye.jwt.auth.principal.JWTParser;
 
-final class WsAuthResolver {
+@ApplicationScoped
+class WsAuthResolver {
 
     private final Instance<JWTParser> jwtParser;
 
+    @Inject
     WsAuthResolver(Instance<JWTParser> jwtParser) {
         this.jwtParser = jwtParser;
     }

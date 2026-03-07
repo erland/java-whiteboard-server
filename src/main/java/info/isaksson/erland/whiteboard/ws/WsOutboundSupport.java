@@ -2,6 +2,8 @@ package info.isaksson.erland.whiteboard.ws;
 
 import java.util.Map;
 
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.websocket.CloseReason;
 import jakarta.websocket.SendHandler;
 import jakarta.websocket.SendResult;
@@ -15,7 +17,8 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import info.isaksson.erland.whiteboard.domain.BoardSnapshot;
 import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
 
-final class WsOutboundSupport {
+@ApplicationScoped
+class WsOutboundSupport {
 
     private static final org.jboss.logging.Logger LOG = org.jboss.logging.Logger.getLogger(WsOutboundSupport.class);
 
@@ -25,6 +28,7 @@ final class WsOutboundSupport {
     private final WsSessionRegistry sessionRegistry;
     private final WsMetrics metrics;
 
+    @Inject
     WsOutboundSupport(ObjectMapper mapper,
                       SnapshotsRepository snapshotsRepository,
                       PresenceHub presenceHub,

@@ -2,13 +2,16 @@ package info.isaksson.erland.whiteboard.ws;
 
 import java.nio.charset.StandardCharsets;
 
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.websocket.CloseReason;
 import jakarta.websocket.Session;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-final class WsInboundMessageHandler {
+@ApplicationScoped
+class WsInboundMessageHandler {
 
     private final ObjectMapper mapper;
     private final BoardOpSequencer opSequencer;
@@ -16,6 +19,7 @@ final class WsInboundMessageHandler {
     private final WsMetrics metrics;
     private final WsOutboundSupport outboundSupport;
 
+    @Inject
     WsInboundMessageHandler(ObjectMapper mapper,
                             BoardOpSequencer opSequencer,
                             WsLimits limits,

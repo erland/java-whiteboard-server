@@ -24,10 +24,9 @@ class BoardWebSocketEndpointTest {
 
     @Test
     void onOpen_withInviteJoin_sendsJoinedAndPresenceWithLatestSnapshot() throws Exception {
-        BoardWebSocketEndpoint endpoint = newEndpoint();
-        endpoint.authorizer = new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "invite:123", "viewer"));
-        endpoint.snapshotsRepository = new FixedSnapshotsRepository(
-                new BoardSnapshot("board-1", 7L, "{\"shapes\":[\"a\"]}", Instant.parse("2026-01-01T10:15:30Z"), "alice"));
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "invite:123", "viewer")),
+                new FixedSnapshotsRepository(new BoardSnapshot("board-1", 7L, "{\"shapes\":[\"a\"]}", Instant.parse("2026-01-01T10:15:30Z"), "alice")));
 
         TestWsSupport.TestSessionState state = TestWsSupport.newSession(
                 URI.create("ws://localhost/ws/boards/board-1?invite=my-token"),
@@ -35,7 +34,7 @@ class BoardWebSocketEndpointTest {
                 null);
         state.session.getUserProperties().put(WsHandshakeConfigurator.PROP_CORRELATION_ID, "corr-1");
 
-        endpoint.onOpen(state.session, "board-1");
+        fixture.endpoint.onOpen(state.session, "board-1");
 
         assertNull(state.closeReason);
         assertEquals(2, state.sentTexts.size());
@@ -59,28 +58,31 @@ class BoardWebSocketEndpointTest {
 
     @Test
     void onOpen_rejectedJoin_closesSessionWithPolicyViolation() {
-        BoardWebSocketEndpoint endpoint = newEndpoint();
-        endpoint.authorizer = new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(false, "NOT_ALLOWED", null, null));
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(false, "NOT_ALLOWED", null, null)),
+                new FixedSnapshotsRepository(null));
 
         TestWsSupport.TestSessionState state = TestWsSupport.newSession("ws://localhost/ws/boards/board-1");
 
-        endpoint.onOpen(state.session, "board-1");
+        fixture.endpoint.onOpen(state.session, "board-1");
 
         assertNotNull(state.closeReason);
-        assertEquals(jakarta.websocket.CloseReason.CloseCodes.VIOLATED_POLICY, state.closeReason.getCloseCode());
+        assertEquals(CloseReason.CloseCodes.VIOLATED_POLICY, state.closeReason.getCloseCode());
         assertEquals("Not allowed", state.closeReason.getReasonPhrase());
         assertTrue(state.sentTexts.isEmpty());
     }
 
     @Test
     void onOpen_whenBoardConnectionLimitReached_closesNewestSession() {
-        BoardWebSocketEndpoint endpoint = newEndpoint();
-        endpoint.limits.maxConnectionsPerBoard = 1;
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        fixture.limits.maxConnectionsPerBoard = 1;
 
-        TestWsSupport.TestSessionState first = openSession(endpoint, "board-1", "alice", "editor");
+        TestWsSupport.TestSessionState first = openSession(fixture, "board-1", "alice", "editor");
         TestWsSupport.TestSessionState second = TestWsSupport.newSession("ws://localhost/ws/boards/board-1");
 
-        endpoint.onOpen(second.session, "board-1");
+        fixture.endpoint.onOpen(second.session, "board-1");
 
         assertNull(first.closeReason);
         assertNotNull(second.closeReason);
@@ -91,11 +93,13 @@ class BoardWebSocketEndpointTest {
 
     @Test
     void onClose_removesPresenceAndBroadcastsUpdatedPresence() throws Exception {
-        BoardWebSocketEndpoint endpoint = newEndpoint();
-        TestWsSupport.TestSessionState alice = openSession(endpoint, "board-1", "alice", "editor");
-        TestWsSupport.TestSessionState bob = openSession(endpoint, "board-1", "bob", "viewer");
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState alice = openSession(fixture, "board-1", "alice", "editor");
+        TestWsSupport.TestSessionState bob = openSession(fixture, "board-1", "bob", "viewer");
 
-        endpoint.onClose(alice.session, new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "bye"));
+        fixture.endpoint.onClose(alice.session, new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "bye"));
 
         JsonNode lastBobMessage = mapper.readTree(bob.sentTexts.get(bob.sentTexts.size() - 1));
         assertEquals("presence", lastBobMessage.get("type").asText());
@@ -105,10 +109,12 @@ class BoardWebSocketEndpointTest {
 
     @Test
     void onError_closesSessionWithUnexpectedCondition() {
-        BoardWebSocketEndpoint endpoint = newEndpoint();
-        TestWsSupport.TestSessionState state = openSession(endpoint, "board-1", "alice", "editor");
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState state = openSession(fixture, "board-1", "alice", "editor");
 
-        endpoint.onError(state.session, new IllegalStateException("boom"));
+        fixture.endpoint.onError(state.session, new IllegalStateException("boom"));
 
         assertNotNull(state.closeReason);
         assertEquals(CloseReason.CloseCodes.UNEXPECTED_CONDITION, state.closeReason.getCloseCode());
@@ -117,10 +123,12 @@ class BoardWebSocketEndpointTest {
 
     @Test
     void onMessage_invalidJson_returnsBadRequestError() throws Exception {
-        BoardWebSocketEndpoint endpoint = newEndpoint();
-        TestWsSupport.TestSessionState state = openSession(endpoint, "board-1", "alice", "editor");
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState state = openSession(fixture, "board-1", "alice", "editor");
 
-        endpoint.onMessage("{not-json", state.session);
+        fixture.endpoint.onMessage("{not-json", state.session);
 
         assertEquals(3, state.sentTexts.size());
         JsonNode error = mapper.readTree(state.sentTexts.get(2));
@@ -130,13 +138,15 @@ class BoardWebSocketEndpointTest {
 
     @Test
     void onMessage_rateLimited_returnsRateLimitedError() throws Exception {
-        BoardWebSocketEndpoint endpoint = newEndpoint();
-        endpoint.limits.ratePerSecond = 1;
-        endpoint.limits.burst = 1;
-        TestWsSupport.TestSessionState state = openSession(endpoint, "board-1", "alice", "editor");
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        fixture.limits.ratePerSecond = 1;
+        fixture.limits.burst = 1;
+        TestWsSupport.TestSessionState state = openSession(fixture, "board-1", "alice", "editor");
 
-        endpoint.onMessage("{\"type\":\"ping\"}", state.session);
-        endpoint.onMessage("{\"type\":\"ping\"}", state.session);
+        fixture.endpoint.onMessage("{\"type\":\"ping\"}", state.session);
+        fixture.endpoint.onMessage("{\"type\":\"ping\"}", state.session);
 
         JsonNode error = mapper.readTree(state.sentTexts.get(state.sentTexts.size() - 1));
         assertEquals("error", error.get("type").asText());
@@ -145,10 +155,12 @@ class BoardWebSocketEndpointTest {
 
     @Test
     void onMessage_viewerCannotPublishOp() throws Exception {
-        BoardWebSocketEndpoint endpoint = newEndpoint();
-        TestWsSupport.TestSessionState state = openSession(endpoint, "board-1", "alice", "viewer");
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "viewer")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState state = openSession(fixture, "board-1", "alice", "viewer");
 
-        endpoint.onMessage("{\"type\":\"op\",\"op\":{\"kind\":\"add\"}}", state.session);
+        fixture.endpoint.onMessage("{\"type\":\"op\",\"op\":{\"kind\":\"add\"}}", state.session);
 
         assertEquals(3, state.sentTexts.size());
         JsonNode error = mapper.readTree(state.sentTexts.get(2));
@@ -157,11 +169,13 @@ class BoardWebSocketEndpointTest {
 
     @Test
     void onMessage_editorPublishesBroadcastWithSequenceToAllSessions() throws Exception {
-        BoardWebSocketEndpoint endpoint = newEndpoint();
-        TestWsSupport.TestSessionState sender = openSession(endpoint, "board-1", "alice", "editor");
-        TestWsSupport.TestSessionState receiver = openSession(endpoint, "board-1", "bob", "viewer");
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState sender = openSession(fixture, "board-1", "alice", "editor");
+        TestWsSupport.TestSessionState receiver = openSession(fixture, "board-1", "bob", "viewer");
 
-        endpoint.onMessage("{\"type\":\"op\",\"op\":{\"kind\":\"add\",\"id\":\"s1\"}}", sender.session);
+        fixture.endpoint.onMessage("{\"type\":\"op\",\"op\":{\"kind\":\"add\",\"id\":\"s1\"}}", sender.session);
 
         JsonNode senderOp = mapper.readTree(sender.sentTexts.get(sender.sentTexts.size() - 1));
         JsonNode receiverOp = mapper.readTree(receiver.sentTexts.get(receiver.sentTexts.size() - 1));
@@ -171,46 +185,74 @@ class BoardWebSocketEndpointTest {
         assertEquals(1L, senderOp.get("seq").asLong());
         assertEquals("alice", senderOp.get("from").asText());
         assertEquals("s1", senderOp.path("op").path("id").asText());
-
         assertEquals(senderOp, receiverOp);
     }
 
     @Test
     void onMessage_tooLargeMessage_returnsErrorAndCloses() throws Exception {
-        BoardWebSocketEndpoint endpoint = newEndpoint();
-        endpoint.limits.maxMessageBytes = 8;
-        TestWsSupport.TestSessionState state = openSession(endpoint, "board-1", "alice", "editor");
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        fixture.limits.maxMessageBytes = 8;
+        TestWsSupport.TestSessionState state = openSession(fixture, "board-1", "alice", "editor");
 
-        endpoint.onMessage("{\"type\":\"ping\",\"a\":1}", state.session);
+        fixture.endpoint.onMessage("{\"type\":\"ping\",\"a\":1}", state.session);
 
         JsonNode error = mapper.readTree(state.sentTexts.get(state.sentTexts.size() - 1));
         assertEquals("MESSAGE_TOO_LARGE", error.get("code").asText());
         assertNotNull(state.closeReason);
-        assertEquals(jakarta.websocket.CloseReason.CloseCodes.TOO_BIG, state.closeReason.getCloseCode());
+        assertEquals(CloseReason.CloseCodes.TOO_BIG, state.closeReason.getCloseCode());
     }
 
-    private TestWsSupport.TestSessionState openSession(BoardWebSocketEndpoint endpoint, String boardId, String userId, String permission) {
-        endpoint.authorizer = new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", userId, permission));
+    private TestWsSupport.TestSessionState openSession(EndpointFixture fixture, String boardId, String userId, String permission) {
+        fixture.endpoint.lifecycleService = new WsLifecycleService(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", userId, permission)),
+                new WsAuthResolver(null),
+                fixture.sessionRegistry,
+                fixture.presenceHub,
+                fixture.limits,
+                fixture.metrics,
+                fixture.outboundSupport);
         TestWsSupport.TestSessionState state = TestWsSupport.newSession("ws://localhost/ws/boards/" + boardId);
-        endpoint.onOpen(state.session, boardId);
+        fixture.endpoint.onOpen(state.session, boardId);
         return state;
     }
 
-    private BoardWebSocketEndpoint newEndpoint() {
+    private EndpointFixture newFixture(BoardJoinAuthorizer authorizer, SnapshotsRepository snapshotsRepository) {
         BoardWebSocketEndpoint endpoint = new BoardWebSocketEndpoint();
-        endpoint.mapper = mapper;
-        endpoint.presenceHub = new PresenceHub();
-        endpoint.snapshotsRepository = new FixedSnapshotsRepository(null);
-        endpoint.opSequencer = new BoardOpSequencer();
-        endpoint.limits = new WsLimits();
-        endpoint.limits.maxMessageBytes = 64 * 1024;
-        endpoint.limits.ratePerSecond = 20;
-        endpoint.limits.burst = 40;
-        endpoint.limits.maxConnectionsPerBoard = 64;
-        endpoint.metrics = new WsMetrics(new SimpleMeterRegistry());
-        endpoint.authorizer = new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "owner"));
-        endpoint.jwtParser = null;
-        return endpoint;
+        PresenceHub presenceHub = new PresenceHub();
+        WsSessionRegistry sessionRegistry = new WsSessionRegistry();
+        WsLimits limits = new WsLimits();
+        limits.maxMessageBytes = 64 * 1024;
+        limits.ratePerSecond = 20;
+        limits.burst = 40;
+        limits.maxConnectionsPerBoard = 64;
+        WsMetrics metrics = new WsMetrics(new SimpleMeterRegistry());
+        WsOutboundSupport outboundSupport = new WsOutboundSupport(mapper, snapshotsRepository, presenceHub, sessionRegistry, metrics);
+        endpoint.lifecycleService = new WsLifecycleService(
+                authorizer,
+                new WsAuthResolver(null),
+                sessionRegistry,
+                presenceHub,
+                limits,
+                metrics,
+                outboundSupport);
+        endpoint.inboundMessageHandler = new WsInboundMessageHandler(
+                mapper,
+                new BoardOpSequencer(),
+                limits,
+                metrics,
+                outboundSupport);
+        return new EndpointFixture(endpoint, presenceHub, sessionRegistry, limits, metrics, outboundSupport);
+    }
+
+    private record EndpointFixture(
+            BoardWebSocketEndpoint endpoint,
+            PresenceHub presenceHub,
+            WsSessionRegistry sessionRegistry,
+            WsLimits limits,
+            WsMetrics metrics,
+            WsOutboundSupport outboundSupport) {
     }
 
     private static final class StaticBoardJoinAuthorizer extends BoardJoinAuthorizer {

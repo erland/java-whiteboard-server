@@ -2,12 +2,13 @@ package info.isaksson.erland.whiteboard.ws;
 
 import java.util.UUID;
 
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.websocket.CloseReason;
 import jakarta.websocket.Session;
 
-import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
-
-final class WsLifecycleService {
+@ApplicationScoped
+class WsLifecycleService {
 
     private static final org.jboss.logging.Logger LOG = org.jboss.logging.Logger.getLogger(WsLifecycleService.class);
 
@@ -15,16 +16,15 @@ final class WsLifecycleService {
     private final WsAuthResolver authResolver;
     private final WsSessionRegistry sessionRegistry;
     private final PresenceHub presenceHub;
-    private final SnapshotsRepository snapshotsRepository;
     private final WsLimits limits;
     private final WsMetrics metrics;
     private final WsOutboundSupport outboundSupport;
 
+    @Inject
     WsLifecycleService(BoardJoinAuthorizer authorizer,
                        WsAuthResolver authResolver,
                        WsSessionRegistry sessionRegistry,
                        PresenceHub presenceHub,
-                       SnapshotsRepository snapshotsRepository,
                        WsLimits limits,
                        WsMetrics metrics,
                        WsOutboundSupport outboundSupport) {
@@ -32,7 +32,6 @@ final class WsLifecycleService {
         this.authResolver = authResolver;
         this.sessionRegistry = sessionRegistry;
         this.presenceHub = presenceHub;
-        this.snapshotsRepository = snapshotsRepository;
         this.limits = limits;
         this.metrics = metrics;
         this.outboundSupport = outboundSupport;
