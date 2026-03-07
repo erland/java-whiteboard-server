@@ -2,11 +2,9 @@ package info.isaksson.erland.whiteboard.api;
 
 import info.isaksson.erland.whiteboard.api.dto.AcceptInviteRequest;
 import info.isaksson.erland.whiteboard.api.dto.AcceptInviteResponse;
-import info.isaksson.erland.whiteboard.domain.Invite;
-import info.isaksson.erland.whiteboard.persistence.InvitesRepository;
 import info.isaksson.erland.whiteboard.security.Authz;
 import info.isaksson.erland.whiteboard.security.BoardAccessService;
-import info.isaksson.erland.whiteboard.security.InviteTokens;
+import info.isaksson.erland.whiteboard.security.InvitePolicy;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -17,8 +15,6 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
-import java.time.Instant;
-
 
 @Path("/api/invites/accept")
 @Consumes(MediaType.APPLICATION_JSON)
@@ -26,16 +22,16 @@ import java.time.Instant;
 public class InviteAcceptResource {
 
     private final SecurityIdentity identity;
-    private final InvitesRepository invitesRepository;
     private final BoardAccessService boardAccess;
+    private final InvitePolicy invitePolicy;
 
     @Inject
     public InviteAcceptResource(SecurityIdentity identity,
-                               InvitesRepository invitesRepository,
-                               BoardAccessService boardAccess) {
+                               BoardAccessService boardAccess,
+                               InvitePolicy invitePolicy) {
         this.identity = identity;
-        this.invitesRepository = invitesRepository;
         this.boardAccess = boardAccess;
+        this.invitePolicy = invitePolicy;
     }
 
     @POST
@@ -49,25 +45,15 @@ public class InviteAcceptResource {
             return Response.status(400).build();
         }
 
-        String tokenHash = InviteTokens.sha256Hex(token);
-        Invite invite = invitesRepository.findByTokenHash(tokenHash).orElse(null);
-        if (invite == null) {
+        InvitePolicy.Decision decision = invitePolicy.validateToken(token);
+        if (!decision.valid() || decision.invite() == null) {
             // do not leak
             return Response.status(404).build();
         }
 
-        if (invite.revokedAt() != null) return Response.status(404).build();
-        if (invite.expiresAt() != null && invite.expiresAt().isBefore(Instant.now())) return Response.status(404).build();
-        if (invite.maxUses() != null && invite.uses() >= invite.maxUses()) return Response.status(404).build();
+        boardAccess.grant(decision.boardId(), userId, decision.permission());
+        invitePolicy.recordUse(decision.invite());
 
-        // grant membership
-        String role = switch (invite.permission()) {
-            case "edit", "editor" -> BoardAccessService.ROLE_EDITOR;
-            default -> BoardAccessService.ROLE_VIEWER;
-        };
-        boardAccess.grant(invite.boardId(), userId, role);
-        invitesRepository.incrementUses(invite.id());
-
-        return Response.ok(new AcceptInviteResponse(invite.boardId(), role)).build();
+        return Response.ok(new AcceptInviteResponse(decision.boardId(), decision.permission())).build();
     }
 }

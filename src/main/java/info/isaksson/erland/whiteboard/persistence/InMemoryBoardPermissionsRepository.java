@@ -27,6 +27,10 @@ public class InMemoryBoardPermissionsRepository implements BoardPermissionsRepos
         return Optional.ofNullable(roles.get(boardId + "|" + userId));
     }
 
+    public void clear() {
+        roles.clear();
+    }
+
     @Override
     public List<String> listBoardIdsForUser(String userId) {
         if (userId == null) return List.of();

@@ -25,7 +25,7 @@ public class BoardJoinAuthorizerTest {
 
         BoardJoinAuthorizer a = new BoardJoinAuthorizer();
         a.boardsRepository = boards;
-        a.invitesRepository = invites;
+        a.invitePolicy = new info.isaksson.erland.whiteboard.security.InvitePolicy(invites);
 
         var ok = a.authorize(boardId, "alice", null);
         assertTrue(ok.allowed());
@@ -58,7 +58,7 @@ public class BoardJoinAuthorizerTest {
 
         BoardJoinAuthorizer a = new BoardJoinAuthorizer();
         a.boardsRepository = boards;
-        a.invitesRepository = invites;
+        a.invitePolicy = new info.isaksson.erland.whiteboard.security.InvitePolicy(invites);
 
         var ok = a.authorize(boardId, null, token);
         assertTrue(ok.allowed());
@@ -88,7 +88,7 @@ public class BoardJoinAuthorizerTest {
 
         BoardJoinAuthorizer a = new BoardJoinAuthorizer();
         a.boardsRepository = boards;
-        a.invitesRepository = invites;
+        a.invitePolicy = new info.isaksson.erland.whiteboard.security.InvitePolicy(invites);
 
         var no = a.authorize(boardId, null, token);
         assertFalse(no.allowed());

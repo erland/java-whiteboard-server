@@ -64,6 +64,10 @@ public class InMemoryInvitesRepository implements InvitesRepository {
         }) != null;
     }
 
+    public void clear() {
+        invites.clear();
+    }
+
     @Override
     public Optional<Invite> incrementUses(String inviteId) {
         Invite updated = invites.computeIfPresent(inviteId, (k, existing) -> {
