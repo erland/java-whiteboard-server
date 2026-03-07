@@ -196,3 +196,8 @@ Then open:
 - Keycloak: `http://<host>/auth/`
 
 > For production-like deployments you’ll typically put TLS in front of `edge-nginx` (or replace it with a TLS-capable reverse proxy).
+
+
+## Board types
+
+The server persists `boardType` as an opaque string and does not maintain a server-side whitelist. New client board types can be introduced without server code changes as long as clients continue to use the coarse server `type` value `whiteboard`. Legacy payloads that send only `type` with a specific board type value are still normalized to `type=whiteboard` and `boardType=<legacy value>`.

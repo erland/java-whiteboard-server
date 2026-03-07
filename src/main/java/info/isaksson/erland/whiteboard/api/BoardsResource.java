@@ -29,6 +29,9 @@ import io.quarkus.security.identity.SecurityIdentity;
 @Consumes(MediaType.APPLICATION_JSON)
 public class BoardsResource {
 
+    private static final String DEFAULT_BOARD_KIND = "whiteboard";
+    private static final String DEFAULT_BOARD_TYPE = "advanced";
+
     private final BoardsRepository boardsRepository;
     private final BoardAccessService boardAccess;
     private final SecurityIdentity identity;
@@ -53,16 +56,24 @@ public class BoardsResource {
         Authz.requireUserOrAdmin(identity);
 
         String name = req == null ? null : req.name();
-        String type = req == null ? null : req.type();
+        String rawType = req == null ? null : req.type();
+        String rawBoardType = req == null ? null : req.boardType();
+        String type = normalizeBoardKind(rawType);
+        String boardType = normalizeBoardType(rawBoardType, rawType);
 
         if (name == null || name.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(new info.isaksson.erland.whiteboard.api.errors.ApiError("VALIDATION_ERROR", "Field 'name' is required."))
                     .build();
         }
-        if (type == null || type.isBlank()) {
+        if (rawType == null || rawType.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(new info.isaksson.erland.whiteboard.api.errors.ApiError("VALIDATION_ERROR", "Field 'type' is required."))
+                    .build();
+        }
+        if (boardType == null || boardType.isBlank()) {
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(new info.isaksson.erland.whiteboard.api.errors.ApiError("VALIDATION_ERROR", "Field 'boardType' is required."))
                     .build();
         }
 
@@ -72,7 +83,8 @@ public class BoardsResource {
         Board created = boardsRepository.create(new Board(
                 id,
                 name.trim(),
-                type.trim(),
+                type,
+                boardType,
                 userId,
                 "active",
                 null,
@@ -94,9 +106,6 @@ public class BoardsResource {
                 .filter(BoardAccessService.Access::canRead)
                 .orElseThrow(NotFoundException::new);
 
-        // Archived boards should still be retrievable by the owner (and other readers)
-        // to support UI flows (e.g. showing an archived status) and match API tests.
-        // Only "deleted" boards are treated as not found.
         Board b = access.board();
         if ("deleted".equals(b.status())) {
             throw new NotFoundException();
@@ -115,7 +124,6 @@ public class BoardsResource {
             throw new NotFoundException();
         }
 
-        // allow owner + editor
         if (!boardAccess.findAccess(id, userId).map(BoardAccessService.Access::canWrite).orElse(false)) {
             throw new NotFoundException();
         }
@@ -126,14 +134,18 @@ public class BoardsResource {
         }
 
         String name = req == null ? null : req.name();
-        String type = req == null ? null : req.type();
-
         String newName = (name == null || name.isBlank()) ? existing.name() : name.trim();
-        String newType = (type == null || type.isBlank()) ? existing.type() : type.trim();
+        String newType = normalizeBoardKind(req == null ? null : req.type());
+        if (newType == null || newType.isBlank()) {
+            newType = existing.type();
+        }
+        String newBoardType = normalizeBoardType(req == null ? null : req.boardType(), req == null ? null : req.type());
+        if (newBoardType == null || newBoardType.isBlank()) {
+            newBoardType = existing.boardType();
+        }
 
-        Board updated = boardsRepository.updateMetadata(id, userId, newName, newType);
+        Board updated = boardsRepository.updateMetadata(id, userId, newName, newType, newBoardType);
         if (updated == null) {
-            // treat as not found to avoid leaks
             throw new NotFoundException();
         }
 
@@ -157,4 +169,25 @@ public class BoardsResource {
         }
         return Response.noContent().build();
     }
+
+    private static String normalizeBoardKind(String requestedType) {
+        if (requestedType == null || requestedType.isBlank()) {
+            return DEFAULT_BOARD_KIND;
+        }
+        return DEFAULT_BOARD_KIND;
+    }
+
+    private static String normalizeBoardType(String requestedBoardType, String requestedType) {
+        if (requestedBoardType != null && !requestedBoardType.isBlank()) {
+            return requestedBoardType.trim();
+        }
+        if (requestedType != null && !requestedType.isBlank()) {
+            String trimmedType = requestedType.trim();
+            if (!DEFAULT_BOARD_KIND.equals(trimmedType)) {
+                return trimmedType;
+            }
+        }
+        return DEFAULT_BOARD_TYPE;
+    }
+
 }

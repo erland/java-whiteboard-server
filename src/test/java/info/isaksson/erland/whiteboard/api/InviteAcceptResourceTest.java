@@ -38,7 +38,7 @@ public class InviteAcceptResourceTest {
         // create a board owned by alice
         boardId = UUID.randomUUID().toString();
         // Board record fields: (id, name, type, ownerUserId, status, createdAt, updatedAt)
-        Board board = new Board(boardId, "Test board", "whiteboard", "alice", "active", Instant.now(), Instant.now());
+        Board board = new Board(boardId, "Test board", "whiteboard", "advanced", "alice", "active", Instant.now(), Instant.now());
         boardsRepository.create(board);
 
         token = InviteTokens.newToken();

@@ -42,7 +42,7 @@ public class InvitesResourceTest {
     @TestSecurity(user = "alice", roles = { "whiteboard-user" })
     void create_list_revoke_validate() {
         String boardId = UUID.randomUUID().toString();
-        boardsRepository.create(new Board(boardId, "B", "advanced", "alice", "active", null, null));
+        boardsRepository.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
 
         String token =
             given()
@@ -122,7 +122,7 @@ public class InvitesResourceTest {
     @TestSecurity(user = "alice", roles = { "whiteboard-user" })
     void validate_expired_and_max_uses() {
         String boardId = UUID.randomUUID().toString();
-        boardsRepository.create(new Board(boardId, "B", "advanced", "alice", "active", null, null));
+        boardsRepository.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
 
         String tokExpired = "tok-exp-" + UUID.randomUUID();
         invitesRepository.create(new Invite(
@@ -194,7 +194,7 @@ public class InvitesResourceTest {
     @TestSecurity(user = "bob", roles = { "whiteboard-user" })
     void other_user_gets_404_when_listing_invites_for_foreign_board() {
         String boardId = UUID.randomUUID().toString();
-        boardsRepository.create(new Board(boardId, "B", "advanced", "alice", "active", null, null));
+        boardsRepository.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
 
         given()
           .when().get("/api/boards/" + boardId + "/invites")

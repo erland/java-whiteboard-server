@@ -13,7 +13,7 @@ public interface BoardsRepository {
 
     Optional<Board> findById(String id);
 
-    Board updateMetadata(String id, String ownerUserId, String name, String type);
+    Board updateMetadata(String id, String ownerUserId, String name, String type, String boardType);
 
     boolean archive(String id, String ownerUserId);
 }

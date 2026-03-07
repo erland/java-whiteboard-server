@@ -1,7 +1,6 @@
 package info.isaksson.erland.whiteboard.persistence;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -27,6 +26,7 @@ public class InMemoryBoardsRepository implements BoardsRepository {
                 board.id(),
                 board.name(),
                 board.type(),
+                board.boardType(),
                 board.ownerUserId(),
                 board.status(),
                 now,
@@ -51,14 +51,18 @@ public class InMemoryBoardsRepository implements BoardsRepository {
     }
 
     @Override
-    public Board updateMetadata(String id, String ownerUserId, String name, String type) {
+    public Board updateMetadata(String id, String ownerUserId, String name, String type, String boardType) {
         return boards.compute(id, (k, existing) -> {
             if (existing == null) return null;
             if (!existing.ownerUserId().equals(ownerUserId)) return existing;
             if (!"active".equals(existing.status())) return existing;
             Instant now = Instant.now();
-            return new Board(existing.id(), name, type, existing.ownerUserId(), existing.status(), existing.createdAt(), now);
+            return new Board(existing.id(), name, type, boardType, existing.ownerUserId(), existing.status(), existing.createdAt(), now);
         });
+    }
+
+    public void clear() {
+        boards.clear();
     }
 
     @Override
@@ -67,7 +71,7 @@ public class InMemoryBoardsRepository implements BoardsRepository {
             if (!existing.ownerUserId().equals(ownerUserId)) return existing;
             if ("deleted".equals(existing.status())) return existing;
             Instant now = Instant.now();
-            return new Board(existing.id(), existing.name(), existing.type(), existing.ownerUserId(), "archived", existing.createdAt(), now);
+            return new Board(existing.id(), existing.name(), existing.type(), existing.boardType(), existing.ownerUserId(), "archived", existing.createdAt(), now);
         }) != null;
     }
 }

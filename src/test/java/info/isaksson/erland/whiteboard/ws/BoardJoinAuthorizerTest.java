@@ -21,7 +21,7 @@ public class BoardJoinAuthorizerTest {
         var boards = new SimpleBoardsRepo();
         var invites = new SimpleInvitesRepo();
         String boardId = UUID.randomUUID().toString();
-        boards.create(new Board(boardId, "B", "advanced", "alice", "active", null, null));
+        boards.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
 
         BoardJoinAuthorizer a = new BoardJoinAuthorizer();
         a.boardsRepository = boards;
@@ -41,7 +41,7 @@ public class BoardJoinAuthorizerTest {
         var boards = new SimpleBoardsRepo();
         var invites = new SimpleInvitesRepo();
         String boardId = UUID.randomUUID().toString();
-        boards.create(new Board(boardId, "B", "advanced", "alice", "active", null, null));
+        boards.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
 
         String token = "tok-" + UUID.randomUUID();
         Invite inv = invites.create(new Invite(
@@ -71,7 +71,7 @@ public class BoardJoinAuthorizerTest {
         var boards = new SimpleBoardsRepo();
         var invites = new SimpleInvitesRepo();
         String boardId = UUID.randomUUID().toString();
-        boards.create(new Board(boardId, "B", "advanced", "alice", "active", null, null));
+        boards.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
 
         String token = "tok-" + UUID.randomUUID();
         invites.create(new Invite(
@@ -100,7 +100,7 @@ public class BoardJoinAuthorizerTest {
         @Override public Board create(Board board) { store.put(board.id(), board); return board; }
         @Override public java.util.List<Board> listForOwner(String ownerUserId) { throw new UnsupportedOperationException(); }
         @Override public Optional<Board> findById(String id) { return Optional.ofNullable(store.get(id)); }
-        @Override public Board updateMetadata(String id, String ownerUserId, String name, String type) { throw new UnsupportedOperationException(); }
+        @Override public Board updateMetadata(String id, String ownerUserId, String name, String type, String boardType) { throw new UnsupportedOperationException(); }
         @Override public boolean archive(String id, String ownerUserId) { throw new UnsupportedOperationException(); }
     }
 

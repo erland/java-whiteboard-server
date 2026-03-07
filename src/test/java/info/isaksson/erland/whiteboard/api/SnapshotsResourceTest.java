@@ -35,7 +35,7 @@ public class SnapshotsResourceTest {
     @TestSecurity(user = "alice", roles = { "whiteboard-user" })
     void create_latest_get_versions_flow() {
         String boardId = UUID.randomUUID().toString();
-        boardsRepository.create(new Board(boardId, "B", "advanced", "alice", "active", null, null));
+        boardsRepository.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
 
         given()
           .contentType("application/json")
@@ -81,7 +81,7 @@ public class SnapshotsResourceTest {
     @TestSecurity(user = "bob", roles = { "whiteboard-user" })
     void other_user_gets_404_no_leak() {
         String boardId = UUID.randomUUID().toString();
-        boardsRepository.create(new Board(boardId, "B", "advanced", "alice", "active", null, null));
+        boardsRepository.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
 
         given()
           .when().get("/api/boards/" + boardId + "/snapshots")
@@ -94,7 +94,7 @@ public class SnapshotsResourceTest {
     @TestSecurity(user = "alice", roles = { "whiteboard-user" })
     void create_rejects_too_large_snapshot_payload() {
         String boardId = UUID.randomUUID().toString();
-        boardsRepository.create(new Board(boardId, "B", "advanced", "alice", "active", null, null));
+        boardsRepository.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
 
         // Default limit is 1 MiB; create a little more than that.
         String big = "x".repeat(1_100_000);

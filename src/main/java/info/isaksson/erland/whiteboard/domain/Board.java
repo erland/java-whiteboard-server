@@ -6,6 +6,7 @@ public record Board(
         String id,
         String name,
         String type,
+        String boardType,
         String ownerUserId,
         String status,
         Instant createdAt,
