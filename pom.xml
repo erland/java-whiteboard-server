@@ -54,6 +54,12 @@
       <artifactId>quarkus-smallrye-health</artifactId>
     </dependency>
 
+    <!-- OpenAPI / Swagger UI -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-smallrye-openapi</artifactId>
+    </dependency>
+
     <!-- Security (Keycloak / OIDC JWT validation) -->
     <dependency>
       <groupId>io.quarkus</groupId>

@@ -81,6 +81,29 @@ TOKEN="$(curl -s \
 curl -s -H "Authorization: Bearer $TOKEN" http://localhost:8080/api/me | jq
 ```
 
+## API documentation
+
+### REST API documentation
+When the server is running locally, generated REST API documentation is available at:
+- OpenAPI document: `http://localhost:8080/q/openapi`
+- Swagger UI: `http://localhost:8080/q/swagger-ui` (Quarkus may redirect this to `/q/swagger-ui/`)
+
+Start the server locally:
+```bash
+mvn quarkus:dev
+```
+
+### WebSocket protocol documentation
+The WebSocket protocol is documented separately in:
+- `docs/websocket-protocol.md`
+
+### Documentation navigation
+Additional project documentation:
+- `docs/README.md`
+- `docs/functional-specification.md`
+- `docs/development-plan.md`
+- `docs/websocket-protocol.md`
+
 ## Invites API (Step 6)
 - `POST /api/boards/{boardId}/invites` (owner) -> returns a one-time `token` (store it client-side)
 - `GET /api/boards/{boardId}/invites` (owner) -> lists invites (no raw tokens)
