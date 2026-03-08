@@ -2,13 +2,16 @@ package info.isaksson.erland.whiteboard.api;
 
 import info.isaksson.erland.whiteboard.api.dto.CreateCommentRequest;
 import info.isaksson.erland.whiteboard.api.dto.UpdateCommentRequest;
-import info.isaksson.erland.whiteboard.api.errors.ApiError;
 import info.isaksson.erland.whiteboard.comments.CommentTargetType;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response;
 
 @ApplicationScoped
 public class CommentRequestSupport {
+
+    @Inject
+    ApiRequestSupport apiRequestSupport;
 
     public CommentTargetType parseTargetType(String value) {
         if (value == null || value.isBlank()) {
@@ -54,8 +57,6 @@ public class CommentRequestSupport {
     }
 
     public Response validationError(String message) {
-        return Response.status(Response.Status.BAD_REQUEST)
-                .entity(new ApiError("VALIDATION_ERROR", message))
-                .build();
+        return apiRequestSupport.validationError(message);
     }
 }

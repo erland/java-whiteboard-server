@@ -50,17 +50,20 @@ public class BoardsResource {
     private final BoardGuards boardGuards;
     private final BoardMetadataRules boardMetadataRules;
     private final SecurityIdentity identity;
+    private final ApiRequestSupport apiRequestSupport;
 
     public BoardsResource(BoardsRepository boardsRepository,
                           BoardAccessService boardAccess,
                           BoardGuards boardGuards,
                           BoardMetadataRules boardMetadataRules,
-                          SecurityIdentity identity) {
+                          SecurityIdentity identity,
+                          ApiRequestSupport apiRequestSupport) {
         this.boardsRepository = boardsRepository;
         this.boardAccess = boardAccess;
         this.boardGuards = boardGuards;
         this.boardMetadataRules = boardMetadataRules;
         this.identity = identity;
+        this.apiRequestSupport = apiRequestSupport;
     }
 
     @GET
@@ -91,7 +94,7 @@ public class BoardsResource {
         try {
             normalized = boardMetadataRules.normalizeCreate(req);
         } catch (BoardMetadataRules.ValidationException e) {
-            return validationError(e.getMessage());
+            return apiRequestSupport.validationError(e.getMessage());
         }
 
         String userId = Authz.userId(identity);
@@ -191,9 +194,4 @@ public class BoardsResource {
         return Response.noContent().build();
     }
 
-    private static Response validationError(String message) {
-        return Response.status(Response.Status.BAD_REQUEST)
-                .entity(new ApiError("VALIDATION_ERROR", message))
-                .build();
-    }
 }

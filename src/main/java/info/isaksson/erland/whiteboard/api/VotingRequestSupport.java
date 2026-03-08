@@ -1,14 +1,17 @@
 package info.isaksson.erland.whiteboard.api;
 
 import info.isaksson.erland.whiteboard.api.dto.CreateVotingSessionRequest;
-import info.isaksson.erland.whiteboard.api.errors.ApiError;
 import info.isaksson.erland.whiteboard.voting.VotingRules;
 import info.isaksson.erland.whiteboard.voting.VotingScopeType;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.ws.rs.core.Response;
 
 @ApplicationScoped
 public class VotingRequestSupport {
+
+    @Inject
+    ApiRequestSupport apiRequestSupport;
 
     public VotingScopeType parseScopeType(String rawValue) {
         if (rawValue == null || rawValue.isBlank()) {
@@ -38,8 +41,6 @@ public class VotingRequestSupport {
     }
 
     public Response validationError(String message) {
-        return Response.status(Response.Status.BAD_REQUEST)
-                .entity(new ApiError("VALIDATION_ERROR", message))
-                .build();
+        return apiRequestSupport.validationError(message);
     }
 }

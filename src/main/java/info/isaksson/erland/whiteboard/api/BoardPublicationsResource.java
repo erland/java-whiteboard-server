@@ -56,6 +56,9 @@ public class BoardPublicationsResource {
     @Inject
     FeatureSupport featureSupport;
 
+    @Inject
+    ApiRequestSupport apiRequestSupport;
+
     @POST
     @Path("/{boardId}/publications")
     @Operation(summary = "Create publication", description = "Creates a publication for a board or a specific snapshot. Only the board owner may create publications.")
@@ -78,14 +81,14 @@ public class BoardPublicationsResource {
         try {
             targetType = parseTargetType(req == null ? null : req.targetType());
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return apiRequestSupport.validationError(e.getMessage());
         }
 
         Instant expiresAt;
         try {
             expiresAt = parseExpiresAt(req == null ? null : req.expiresAt());
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return apiRequestSupport.validationError(e.getMessage());
         }
 
         boolean allowComments = req != null && Boolean.TRUE.equals(req.allowComments());
@@ -104,7 +107,7 @@ public class BoardPublicationsResource {
                     .entity(PublicationCreatedResponse.from(created))
                     .build();
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return apiRequestSupport.validationError(e.getMessage());
         }
     }
 
@@ -205,9 +208,4 @@ public class BoardPublicationsResource {
         }
     }
 
-    private static Response validationError(String message) {
-        return Response.status(Response.Status.BAD_REQUEST)
-                .entity(new ApiError("VALIDATION_ERROR", message))
-                .build();
-    }
 }

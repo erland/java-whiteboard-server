@@ -2,7 +2,6 @@ package info.isaksson.erland.whiteboard.api;
 
 import info.isaksson.erland.whiteboard.publication.Publication;
 import info.isaksson.erland.whiteboard.publication.PublicationAccessTokens;
-import info.isaksson.erland.whiteboard.publication.PublicationPolicy;
 import info.isaksson.erland.whiteboard.security.Authz;
 import info.isaksson.erland.whiteboard.security.BoardAccessService;
 import info.isaksson.erland.whiteboard.security.BoardGuards;
@@ -17,17 +16,17 @@ public class VotingAccessResolver {
 
     private final BoardGuards boardGuards;
     private final SecurityIdentity identity;
-    private final PublicationPolicy publicationPolicy;
+    private final PublicationAccessSupport publicationAccessSupport;
     private final VotingService votingService;
 
     @Inject
     public VotingAccessResolver(BoardGuards boardGuards,
                                 SecurityIdentity identity,
-                                PublicationPolicy publicationPolicy,
+                                PublicationAccessSupport publicationAccessSupport,
                                 VotingService votingService) {
         this.boardGuards = boardGuards;
         this.identity = identity;
-        this.publicationPolicy = publicationPolicy;
+        this.publicationAccessSupport = publicationAccessSupport;
         this.votingService = votingService;
     }
 
@@ -39,7 +38,7 @@ public class VotingAccessResolver {
     }
 
     public BoardAccessService.Access requireVoteObservationAccess(String boardId, String publicationToken) {
-        Publication publication = resolveReadablePublication(boardId, publicationToken);
+        Publication publication = publicationAccessSupport.resolveReadablePublication(boardId, publicationToken);
         if (identity != null && !identity.isAnonymous()) {
             String userId = Authz.userId(identity);
             return boardGuards.requireVoteObservationAccess(boardId, userId, publication != null);
@@ -51,7 +50,7 @@ public class VotingAccessResolver {
     }
 
     public VoteActor requireVoteParticipant(String boardId, String publicationToken, String participantToken) {
-        Publication publication = resolveReadablePublication(boardId, publicationToken);
+        Publication publication = publicationAccessSupport.resolveReadablePublication(boardId, publicationToken);
         if (identity != null && !identity.isAnonymous()) {
             String userId = Authz.userId(identity);
             BoardAccessService.Access access = boardGuards.requireVoteParticipationAccess(boardId, userId, publication != null);
@@ -74,17 +73,6 @@ public class VotingAccessResolver {
         return session;
     }
 
-    private Publication resolveReadablePublication(String boardId, String publicationToken) {
-        PublicationPolicy.Decision decision = publicationPolicy.validateToken(publicationToken);
-        if (!decision.valid() || decision.publication() == null) {
-            return null;
-        }
-        Publication publication = decision.publication();
-        if (!boardId.equals(publication.boardId())) {
-            return null;
-        }
-        return publication;
-    }
 
     private static String normalizeParticipantToken(String participantToken) {
         if (participantToken == null || participantToken.isBlank()) {

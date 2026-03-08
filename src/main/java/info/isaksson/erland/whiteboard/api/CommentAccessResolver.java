@@ -3,7 +3,6 @@ package info.isaksson.erland.whiteboard.api;
 import info.isaksson.erland.whiteboard.comments.Comment;
 import info.isaksson.erland.whiteboard.comments.CommentService;
 import info.isaksson.erland.whiteboard.publication.Publication;
-import info.isaksson.erland.whiteboard.publication.PublicationPolicy;
 import info.isaksson.erland.whiteboard.security.Authz;
 import info.isaksson.erland.whiteboard.security.BoardGuards;
 import io.quarkus.security.identity.SecurityIdentity;
@@ -16,22 +15,22 @@ public class CommentAccessResolver {
 
     private final BoardGuards boardGuards;
     private final SecurityIdentity identity;
-    private final PublicationPolicy publicationPolicy;
+    private final PublicationAccessSupport publicationAccessSupport;
     private final CommentService commentService;
 
     @Inject
     public CommentAccessResolver(BoardGuards boardGuards,
                                  SecurityIdentity identity,
-                                 PublicationPolicy publicationPolicy,
+                                 PublicationAccessSupport publicationAccessSupport,
                                  CommentService commentService) {
         this.boardGuards = boardGuards;
         this.identity = identity;
-        this.publicationPolicy = publicationPolicy;
+        this.publicationAccessSupport = publicationAccessSupport;
         this.commentService = commentService;
     }
 
     public void requireCommentReadAccess(String boardId, String publicationToken) {
-        Publication publication = resolveReadablePublication(boardId, publicationToken);
+        Publication publication = publicationAccessSupport.resolveReadablePublication(boardId, publicationToken, Publication::allowComments);
         if (identity != null && !identity.isAnonymous()) {
             String userId = Authz.userId(identity);
             boardGuards.requirePublicationReadAccess(boardId, userId, publication != null);
@@ -74,15 +73,4 @@ public class CommentAccessResolver {
         return existing;
     }
 
-    private Publication resolveReadablePublication(String boardId, String publicationToken) {
-        PublicationPolicy.Decision decision = publicationPolicy.validateToken(publicationToken);
-        if (!decision.valid() || decision.publication() == null) {
-            return null;
-        }
-        Publication publication = decision.publication();
-        if (!boardId.equals(publication.boardId()) || !publication.allowComments()) {
-            return null;
-        }
-        return publication;
-    }
 }
