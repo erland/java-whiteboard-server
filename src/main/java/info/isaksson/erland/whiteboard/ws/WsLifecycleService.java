@@ -9,6 +9,8 @@ import jakarta.websocket.Session;
 
 import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralSignal;
 import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralStateRegistry;
+import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralEventType;
+import info.isaksson.erland.whiteboard.ws.ephemeral.TimerEphemeralStateRegistry;
 
 @ApplicationScoped
 class WsLifecycleService {
@@ -20,6 +22,7 @@ class WsLifecycleService {
     private final WsSessionRegistry sessionRegistry;
     private final PresenceHub presenceHub;
     private final EphemeralStateRegistry ephemeralStateRegistry;
+    private final TimerEphemeralStateRegistry timerStateRegistry;
     private final WsContractSupport contractSupport;
     private final WsLimits limits;
     private final WsMetrics metrics;
@@ -31,6 +34,7 @@ class WsLifecycleService {
                        WsSessionRegistry sessionRegistry,
                        PresenceHub presenceHub,
                        EphemeralStateRegistry ephemeralStateRegistry,
+                       TimerEphemeralStateRegistry timerStateRegistry,
                        WsContractSupport contractSupport,
                        WsLimits limits,
                        WsMetrics metrics,
@@ -40,6 +44,7 @@ class WsLifecycleService {
         this.sessionRegistry = sessionRegistry;
         this.presenceHub = presenceHub;
         this.ephemeralStateRegistry = ephemeralStateRegistry;
+        this.timerStateRegistry = timerStateRegistry;
         this.contractSupport = contractSupport;
         this.limits = limits;
         this.metrics = metrics;
@@ -91,6 +96,14 @@ class WsLifecycleService {
                 accepted.correlationId(),
                 contractSupport.protocolVersion(),
                 contractSupport.capabilities());
+        timerStateRegistry.current(boardId).ifPresent(state ->
+                outboundSupport.send(session, new WsMessage.Ephemeral(
+                        boardId,
+                        state.path("connectionId").asText(accepted.connectionId()),
+                        state.path("from").asText(accepted.effectiveUserId()),
+                        EphemeralEventType.TIMER_STATE.wireName(),
+                        state,
+                        false)));
         outboundSupport.broadcastPresence(boardId);
 
         metrics.joinAccepted();
@@ -173,6 +186,8 @@ class WsLifecycleService {
                 new TokenBucketRateLimiter(limits.burst(), limits.ratePerSecond()));
         session.getUserProperties().put(WsSessionProps.EPHEMERAL_RATE_LIMITER,
                 new TokenBucketRateLimiter(limits.ephemeralBurst(), limits.ephemeralRatePerSecond()));
+        session.getUserProperties().put(WsSessionProps.REACTION_RATE_LIMITER,
+                new TokenBucketRateLimiter(limits.reactionBurst(), limits.reactionRatePerSecond()));
         return new WsConnectionContext(
                 context.boardId(),
                 context.connectionId(),

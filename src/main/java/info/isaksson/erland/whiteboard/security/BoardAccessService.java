@@ -39,40 +39,33 @@ public class BoardAccessService {
             return ROLE_OWNER.equals(role);
         }
 
-        public boolean isEditor() {
-            return ROLE_EDITOR.equals(role);
-        }
-
-        public boolean isViewer() {
-            return ROLE_VIEWER.equals(role);
-        }
-
         public boolean isPublicationReader() {
             return ROLE_PUBLICATION_READER.equals(role) || viaPublication;
         }
 
-        public boolean isFacilitator() {
-            return isOwner();
-        }
-
-        public boolean isParticipant() {
-            return isOwner() || isEditor() || isViewer();
-        }
-
-        public boolean canObserveVotes() {
-            return isParticipant();
-        }
-
         public boolean canWrite() {
-            return isOwner() || isEditor();
+            return isOwner() || ROLE_EDITOR.equals(role);
         }
 
         public boolean canRead() {
-            return isOwner() || isEditor() || isViewer() || isPublicationReader();
+            return isOwner() || ROLE_EDITOR.equals(role) || ROLE_VIEWER.equals(role) || isPublicationReader();
         }
 
         public boolean allows(BoardCapability capability) {
-            return BoardCapabilityPolicy.allows(this, capability);
+            if (capability == null) {
+                return false;
+            }
+            return switch (capability) {
+                case BOARD_READ -> canRead() && !isPublicationReader();
+                case BOARD_WRITE -> canWrite();
+                case BOARD_OWNER -> isOwner();
+                case PUBLICATION_READ -> canRead();
+                case COMMENT_PARTICIPATE -> isOwner() || ROLE_EDITOR.equals(role) || ROLE_VIEWER.equals(role);
+                case ASSET_USE -> canRead();
+                case ASSET_MANAGE -> canWrite();
+                case LIBRARY_READ -> canRead();
+                case LIBRARY_SHARE, LIBRARY_MANAGE -> canWrite();
+            };
         }
     }
 

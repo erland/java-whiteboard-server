@@ -25,6 +25,12 @@ public class WsLimits {
     @ConfigProperty(name = "whiteboard.limits.ws.ephemeral-rate.burst", defaultValue = "120")
     int ephemeralBurst;
 
+    @ConfigProperty(name = "whiteboard.limits.ws.reaction-rate.per-second", defaultValue = "8")
+    int reactionRatePerSecond;
+
+    @ConfigProperty(name = "whiteboard.limits.ws.reaction-rate.burst", defaultValue = "16")
+    int reactionBurst;
+
     @ConfigProperty(name = "whiteboard.limits.ws.max-connections-per-board", defaultValue = "64")
     int maxConnectionsPerBoard;
 
@@ -37,6 +43,10 @@ public class WsLimits {
     public int ephemeralRatePerSecond() { return ephemeralRatePerSecond; }
 
     public int ephemeralBurst() { return ephemeralBurst; }
+
+    public int reactionRatePerSecond() { return reactionRatePerSecond; }
+
+    public int reactionBurst() { return reactionBurst; }
 
     public int maxConnectionsPerBoard() { return maxConnectionsPerBoard; }
 }

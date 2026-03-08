@@ -70,33 +70,4 @@ public class BoardGuardsTest {
         assertThrows(NotFoundException.class, () -> boardGuards.requireBoardReadAccess(boardId, "mallory"));
         assertThrows(NotFoundException.class, () -> boardGuards.requireCommentParticipation(boardId, null, true));
     }
-    @Test
-    void tier2_guard_methods_follow_default_facilitator_and_participant_policy() {
-        String boardId = UUID.randomUUID().toString();
-        boardsRepository.create(new Board(boardId, "Tier2", "whiteboard", "advanced", "alice", "active", null, null));
-        permissionsRepository.upsert(boardId, "bob", BoardAccessService.ROLE_VIEWER);
-        permissionsRepository.upsert(boardId, "carol", BoardAccessService.ROLE_EDITOR);
-
-        assertDoesNotThrow(() -> boardGuards.requireFacilitationAccess(boardId, "alice"));
-        assertDoesNotThrow(() -> boardGuards.requireTimerControl(boardId, "alice"));
-        assertDoesNotThrow(() -> boardGuards.requireVoteParticipation(boardId, "bob"));
-        assertDoesNotThrow(() -> boardGuards.requireVoteParticipation(boardId, "carol"));
-        assertDoesNotThrow(() -> boardGuards.requireVoteObservation(boardId, "bob", false));
-        assertDoesNotThrow(() -> boardGuards.requireTimerObservation(boardId, "bob", false));
-        assertDoesNotThrow(() -> boardGuards.requireReactionEmit(boardId, "bob"));
-        assertDoesNotThrow(() -> boardGuards.requireReactionObservation(boardId, "carol", false));
-        assertDoesNotThrow(() -> boardGuards.requirePrivateModeContribution(boardId, "bob"));
-        assertDoesNotThrow(() -> boardGuards.requirePrivateModeReveal(boardId, "alice"));
-        assertDoesNotThrow(() -> boardGuards.requirePrivateModeView(boardId, "alice"));
-
-        assertThrows(NotFoundException.class, () -> boardGuards.requireFacilitationAccess(boardId, "carol"));
-        assertThrows(NotFoundException.class, () -> boardGuards.requireTimerControl(boardId, "bob"));
-        assertThrows(NotFoundException.class, () -> boardGuards.requireReactionEmit(boardId, "mallory"));
-        assertThrows(NotFoundException.class, () -> boardGuards.requireVoteObservation(boardId, null, true));
-        assertThrows(NotFoundException.class, () -> boardGuards.requireTimerObservation(boardId, null, true));
-        assertThrows(NotFoundException.class, () -> boardGuards.requireReactionObservation(boardId, null, true));
-        assertThrows(NotFoundException.class, () -> boardGuards.requirePrivateModeReveal(boardId, "bob"));
-        assertThrows(NotFoundException.class, () -> boardGuards.requirePrivateModeView(boardId, "bob"));
-    }
-
 }

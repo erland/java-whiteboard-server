@@ -7,7 +7,10 @@ public enum EphemeralEventType {
     CURSOR("cursor"),
     VIEWPORT("viewport"),
     FOLLOW("follow"),
-    PRESENCE_META("presence-meta");
+    PRESENCE_META("presence-meta"),
+    REACTION("reaction"),
+    TIMER_CONTROL("timer-control"),
+    TIMER_STATE("timer-state");
 
     private final String wireName;
 

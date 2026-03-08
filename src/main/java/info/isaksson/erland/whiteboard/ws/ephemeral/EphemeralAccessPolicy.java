@@ -11,10 +11,12 @@ public class EphemeralAccessPolicy {
         }
         String normalized = permission.trim().toLowerCase();
         return switch (eventType) {
-            case CURSOR, VIEWPORT, PRESENCE_META -> "owner".equals(normalized)
+            case CURSOR, VIEWPORT, PRESENCE_META, REACTION -> "owner".equals(normalized)
                     || "editor".equals(normalized)
                     || "viewer".equals(normalized);
             case FOLLOW -> "owner".equals(normalized) || "editor".equals(normalized);
+            case TIMER_CONTROL -> "owner".equals(normalized) || "editor".equals(normalized);
+            case TIMER_STATE -> false;
         };
     }
 }

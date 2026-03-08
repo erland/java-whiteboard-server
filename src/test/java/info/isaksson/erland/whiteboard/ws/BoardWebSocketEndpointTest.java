@@ -20,6 +20,9 @@ import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
 import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralAccessPolicy;
 import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralInboundMessageHandler;
 import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralStateRegistry;
+import info.isaksson.erland.whiteboard.ws.ephemeral.ReactionPayloadValidator;
+import info.isaksson.erland.whiteboard.ws.ephemeral.TimerControlPayloadValidator;
+import info.isaksson.erland.whiteboard.ws.ephemeral.TimerEphemeralStateRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.websocket.CloseReason;
 
@@ -322,6 +325,99 @@ class BoardWebSocketEndpointTest {
         assertEquals(CloseReason.CloseCodes.TOO_BIG, state.closeReason.getCloseCode());
     }
 
+
+    @Test
+    void onMessage_reactionBroadcastsForViewerSessions() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "viewer")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState alice = openSession(fixture, "board-1", "alice", "viewer");
+        TestWsSupport.TestSessionState bob = openSession(fixture, "board-1", "bob", "viewer");
+
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"reaction\",\"payload\":{\"reactionType\":\"thumbs-up\",\"durationMs\":1200}}", alice.session);
+
+        JsonNode reaction = mapper.readTree(bob.sentTexts.get(bob.sentTexts.size() - 1));
+        assertEquals("ephemeral", reaction.get("type").asText());
+        assertEquals("reaction", reaction.get("eventType").asText());
+        assertEquals("thumbs-up", reaction.get("payload").get("reactionType").asText());
+    }
+
+    @Test
+    void onMessage_invalidReactionPayload_returnsValidationError() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "viewer")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState alice = openSession(fixture, "board-1", "alice", "viewer");
+
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"reaction\",\"payload\":{\"reactionType\":\"\"}}", alice.session);
+
+        JsonNode error = mapper.readTree(alice.sentTexts.get(alice.sentTexts.size() - 1));
+        assertEquals("VALIDATION_ERROR", error.get("code").asText());
+    }
+
+    @Test
+    void onMessage_reactionRateLimitUsesDedicatedLimiter() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "viewer")),
+                new FixedSnapshotsRepository(null));
+        fixture.limits.reactionBurst = 1;
+        fixture.limits.reactionRatePerSecond = 1;
+        TestWsSupport.TestSessionState alice = openSession(fixture, "board-1", "alice", "viewer");
+
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"reaction\",\"payload\":{\"reactionType\":\"thumbs-up\"}}", alice.session);
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"reaction\",\"payload\":{\"reactionType\":\"thumbs-up\"}}", alice.session);
+
+        JsonNode error = mapper.readTree(alice.sentTexts.get(alice.sentTexts.size() - 1));
+        assertEquals("RATE_LIMITED", error.get("code").asText());
+    }
+
+    @Test
+    void onMessage_timerControlBroadcastsTimerState() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState alice = openSession(fixture, "board-1", "alice", "editor");
+        TestWsSupport.TestSessionState bob = openSession(fixture, "board-1", "bob", "viewer");
+
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"timer-control\",\"payload\":{\"action\":\"start\",\"durationMs\":30000,\"timerId\":\"retro-timer\"}}", alice.session);
+
+        JsonNode timerState = mapper.readTree(bob.sentTexts.get(bob.sentTexts.size() - 1));
+        assertEquals("ephemeral", timerState.get("type").asText());
+        assertEquals("timer-state", timerState.get("eventType").asText());
+        assertEquals("running", timerState.get("payload").get("state").asText());
+        assertEquals("retro-timer", timerState.get("payload").get("timerId").asText());
+    }
+
+    @Test
+    void onMessage_timerControlForbiddenForViewer() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "viewer")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState alice = openSession(fixture, "board-1", "alice", "viewer");
+
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"timer-control\",\"payload\":{\"action\":\"start\",\"durationMs\":30000}}", alice.session);
+
+        JsonNode error = mapper.readTree(alice.sentTexts.get(alice.sentTexts.size() - 1));
+        assertEquals("FORBIDDEN", error.get("code").asText());
+    }
+
+    @Test
+    void onOpen_whenTimerStateExists_replaysCurrentTimerStateToNewSession() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState alice = openSession(fixture, "board-1", "alice", "editor");
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"timer-control\",\"payload\":{\"action\":\"start\",\"durationMs\":30000,\"timerId\":\"retro-timer\"}}", alice.session);
+
+        TestWsSupport.TestSessionState bob = openSession(fixture, "board-1", "bob", "viewer");
+
+        JsonNode joined = mapper.readTree(bob.sentTexts.get(0));
+        JsonNode replay = mapper.readTree(bob.sentTexts.get(1));
+        assertEquals("joined", joined.get("type").asText());
+        assertEquals("timer-state", replay.get("eventType").asText());
+        assertEquals("retro-timer", replay.get("payload").get("timerId").asText());
+    }
+
     private TestWsSupport.TestSessionState openSession(EndpointFixture fixture, String boardId, String userId, String permission) {
         return openSession(fixture, boardId, userId, permission, true);
     }
@@ -333,6 +429,7 @@ class BoardWebSocketEndpointTest {
                 fixture.sessionRegistry,
                 fixture.presenceHub,
                 fixture.ephemeralStateRegistry,
+                fixture.timerStateRegistry,
                 contractSupport(ephemeralEnabled),
                 fixture.limits,
                 fixture.metrics,
@@ -357,15 +454,19 @@ class BoardWebSocketEndpointTest {
         limits.maxConnectionsPerBoard = 64;
         limits.ephemeralRatePerSecond = 60;
         limits.ephemeralBurst = 120;
+        limits.reactionRatePerSecond = 8;
+        limits.reactionBurst = 16;
         WsMetrics metrics = new WsMetrics(new SimpleMeterRegistry());
         WsOutboundSupport outboundSupport = new WsOutboundSupport(mapper, snapshotsRepository, presenceHub, sessionRegistry, metrics);
         EphemeralStateRegistry ephemeralStateRegistry = new EphemeralStateRegistry();
+        TimerEphemeralStateRegistry timerStateRegistry = new TimerEphemeralStateRegistry(mapper);
         endpoint.lifecycleService = new WsLifecycleService(
                 authorizer,
                 new WsAuthResolver(null),
                 sessionRegistry,
                 presenceHub,
                 ephemeralStateRegistry,
+                timerStateRegistry,
                 contractSupport(ephemeralEnabled),
                 limits,
                 metrics,
@@ -376,9 +477,9 @@ class BoardWebSocketEndpointTest {
                 limits,
                 metrics,
                 outboundSupport,
-                new EphemeralInboundMessageHandler(new EphemeralAccessPolicy(), ephemeralStateRegistry, outboundSupport),
+                new EphemeralInboundMessageHandler(new EphemeralAccessPolicy(), ephemeralStateRegistry, timerStateRegistry, new ReactionPayloadValidator(), new TimerControlPayloadValidator(), outboundSupport, metrics),
                 contractSupport(ephemeralEnabled));
-        return new EndpointFixture(endpoint, presenceHub, sessionRegistry, ephemeralStateRegistry, limits, metrics, outboundSupport);
+        return new EndpointFixture(endpoint, presenceHub, sessionRegistry, ephemeralStateRegistry, timerStateRegistry, limits, metrics, outboundSupport);
     }
 
     private WsContractSupport contractSupport(boolean ephemeralEnabled) {
@@ -399,6 +500,7 @@ class BoardWebSocketEndpointTest {
             PresenceHub presenceHub,
             WsSessionRegistry sessionRegistry,
             EphemeralStateRegistry ephemeralStateRegistry,
+            TimerEphemeralStateRegistry timerStateRegistry,
             WsLimits limits,
             WsMetrics metrics,
             WsOutboundSupport outboundSupport) {

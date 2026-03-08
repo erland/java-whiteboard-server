@@ -284,6 +284,9 @@ Supported event types in the current foundation:
 - `viewport`
 - `follow`
 - `presence-meta`
+- `reaction`
+- `timer-control` (client-originated control signal, validated and converted server-side)
+- `timer-state` (server-originated state update / reconnect replay)
 
 Example publish/broadcast payload:
 
@@ -307,8 +310,11 @@ Disconnect cleanup uses the same message family with `cleared: true` so consumer
 Rules:
 - ephemeral events are never sequenced as board operations
 - ephemeral events are never written to snapshots
-- viewers may emit `cursor`, `viewport`, and `presence-meta`
-- only owners/editors may emit `follow`
+- viewers may emit `cursor`, `viewport`, `presence-meta`, and `reaction`
+- only owners/editors may emit `follow` and `timer-control`
+- `timer-state` is server-managed and is never accepted from clients
+- reaction payloads require a bounded `reactionType` and are subject to dedicated anti-spam limits
+- timer control payloads require a valid `action`; `start` requires `durationMs`
 - payload must be a JSON object
 
 ### `error`
@@ -339,7 +345,7 @@ Known error codes currently used by the implementation:
 ## Client-to-server messages
 
 ### `op`
-The only currently supported client-originated message type is `op`.
+One supported client-originated message type is `op`.
 
 Example:
 
@@ -368,8 +374,50 @@ Behavior:
 - on success, the server assigns a sequence number and broadcasts an `op` message to all board sessions, including the sender
 - the server does not currently send a separate ack message
 
+
+### `ephemeral`
+Clients may also send `ephemeral` messages for transient collaboration signals.
+
+Examples:
+
+```json
+{
+  "type": "ephemeral",
+  "eventType": "reaction",
+  "payload": {
+    "reactionType": "thumbs-up",
+    "durationMs": 1200
+  }
+}
+```
+
+```json
+{
+  "type": "ephemeral",
+  "eventType": "timer-control",
+  "payload": {
+    "action": "start",
+    "timerId": "retro-timer",
+    "durationMs": 30000
+  }
+}
+```
+
+Validation rules:
+- `eventType` is required
+- `payload` must be an object
+- `reaction` requires a bounded `reactionType`
+- `timer-control` requires a supported `action`; `start` requires `durationMs`
+- `timer-state` is not accepted from clients
+
+Behavior:
+- `reaction` is broadcast as an `ephemeral` event to the board
+- `timer-control` is converted by the server into a canonical `timer-state` broadcast
+- reconnecting sessions may receive the latest active `timer-state` immediately after `joined`
+- old clients may safely ignore unknown Tier 2 `eventType` values
+
 ### Unknown message types
-If the message JSON is valid but `type` is not `op`, the server currently ignores the message.
+If the message JSON is valid but `type` is not `op` or `ephemeral`, the server currently ignores the message.
 
 There is no error response for unknown message types in the current implementation.
 

@@ -18,6 +18,7 @@ import info.isaksson.erland.whiteboard.config.ProtocolCompatibility;
 import info.isaksson.erland.whiteboard.domain.BoardSnapshot;
 import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
 import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralStateRegistry;
+import info.isaksson.erland.whiteboard.ws.ephemeral.TimerEphemeralStateRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.websocket.CloseReason;
 
@@ -31,7 +32,7 @@ class WsLifecycleServiceTest {
         PresenceHub presenceHub = new PresenceHub();
         FixedSnapshotsRepository snapshots = new FixedSnapshotsRepository(new BoardSnapshot("board-1", 2L, "{\"shapes\":[\"x\"]}", Instant.parse("2026-01-01T10:15:30Z"), "alice"));
         WsMetrics metrics = new WsMetrics(new SimpleMeterRegistry());
-        WsLifecycleService service = new WsLifecycleService(new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")), new WsAuthResolver(null), sessionRegistry, presenceHub, new EphemeralStateRegistry(), contractSupport(), limits(), metrics, new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
+        WsLifecycleService service = new WsLifecycleService(new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")), new WsAuthResolver(null), sessionRegistry, presenceHub, new EphemeralStateRegistry(), new TimerEphemeralStateRegistry(mapper), contractSupport(), limits(), metrics, new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
 
         TestWsSupport.TestSessionState state = TestWsSupport.newSession(URI.create("ws://localhost/ws/boards/board-1"), Map.of(), null);
         state.session.getUserProperties().put(WsHandshakeConfigurator.PROP_CORRELATION_ID, "corr-1");
@@ -49,7 +50,7 @@ class WsLifecycleServiceTest {
         PresenceHub presenceHub = new PresenceHub();
         FixedSnapshotsRepository snapshots = new FixedSnapshotsRepository(null);
         WsMetrics metrics = new WsMetrics(new SimpleMeterRegistry());
-        WsLifecycleService service = new WsLifecycleService(new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")), new WsAuthResolver(null), sessionRegistry, presenceHub, new EphemeralStateRegistry(), contractSupport(), limits(), metrics, new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
+        WsLifecycleService service = new WsLifecycleService(new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")), new WsAuthResolver(null), sessionRegistry, presenceHub, new EphemeralStateRegistry(), new TimerEphemeralStateRegistry(mapper), contractSupport(), limits(), metrics, new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
 
         TestWsSupport.TestSessionState state = TestWsSupport.newSession(URI.create("ws://localhost/ws/boards/board-1?protocolVersion=2"), Map.of("protocolVersion", List.of("2")), null);
         service.open(state.session, "board-1");
@@ -79,6 +80,8 @@ class WsLifecycleServiceTest {
         limits.burst = 40;
         limits.ephemeralRatePerSecond = 60;
         limits.ephemeralBurst = 120;
+        limits.reactionRatePerSecond = 8;
+        limits.reactionBurst = 16;
         limits.maxConnectionsPerBoard = 64;
         return limits;
     }
