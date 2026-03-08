@@ -49,4 +49,9 @@ public class InMemorySnapshotsRepository implements SnapshotsRepository {
         if (versions == null) return List.of();
         return versions.keySet().stream().sorted(Comparator.reverseOrder()).toList();
     }
+
+    public void clear() {
+        store.clear();
+    }
+
 }

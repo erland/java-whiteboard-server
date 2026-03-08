@@ -11,6 +11,10 @@ public record ApiError(
                 "VALIDATION_ERROR",
                 "BOARD_NOT_ACTIVE",
                 "INVITE_NOT_FOUND",
+                "PUBLICATION_NOT_FOUND",
+                "PUBLICATION_REVOKED",
+                "PUBLICATION_EXPIRED",
+                "PUBLICATION_INACTIVE",
                 "PAYLOAD_TOO_LARGE"
         })
         String code,
