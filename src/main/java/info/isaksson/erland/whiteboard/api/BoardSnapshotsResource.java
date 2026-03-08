@@ -1,21 +1,14 @@
 package info.isaksson.erland.whiteboard.api;
 
-import java.nio.charset.StandardCharsets;
-import java.util.List;
-
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.openapi.annotations.Operation;
@@ -33,10 +26,7 @@ import info.isaksson.erland.whiteboard.api.dto.CreateSnapshotRequest;
 import info.isaksson.erland.whiteboard.api.dto.SnapshotResponse;
 import info.isaksson.erland.whiteboard.api.dto.SnapshotVersionsResponse;
 import info.isaksson.erland.whiteboard.api.errors.ApiError;
-import info.isaksson.erland.whiteboard.domain.BoardSnapshot;
-import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
 import info.isaksson.erland.whiteboard.security.Authz;
-import info.isaksson.erland.whiteboard.security.BoardGuards;
 import io.quarkus.security.identity.SecurityIdentity;
 
 @Tag(name = "Snapshots")
@@ -50,16 +40,10 @@ public class BoardSnapshotsResource {
     long maxSnapshotBytes;
 
     @Inject
-    BoardGuards boardGuards;
-
-    @Inject
-    SnapshotsRepository snapshotsRepository;
+    SnapshotApplicationService snapshotApplicationService;
 
     @Inject
     SecurityIdentity identity;
-
-    @Inject
-    ObjectMapper mapper;
 
     @POST
     @Path("/{boardId}/snapshots")
@@ -76,39 +60,18 @@ public class BoardSnapshotsResource {
             @RequestBody(required = true, description = "Snapshot payload stored as opaque JSON by the backend.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CreateSnapshotRequest.class)))
             CreateSnapshotRequest req) {
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-
-        boardGuards.requireWritableAccess(boardId, userId);
-
-        JsonNode snapshotNode = req == null ? null : req.snapshot();
-        if (snapshotNode == null || snapshotNode.isNull()) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ApiError("VALIDATION_ERROR", "Field 'snapshot' is required."))
-                    .build();
-        }
-
-        String snapshotJson;
         try {
-            snapshotJson = mapper.writeValueAsString(snapshotNode);
-        } catch (Exception e) {
+            SnapshotResponse created = snapshotApplicationService.create(boardId, Authz.userId(identity), req, maxSnapshotBytes);
+            return Response.status(Response.Status.CREATED).entity(created).build();
+        } catch (SnapshotApplicationService.SnapshotValidationException e) {
             return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(new ApiError("VALIDATION_ERROR", "Field 'snapshot' must be valid JSON."))
+                    .entity(new ApiError("VALIDATION_ERROR", e.getMessage()))
                     .build();
-        }
-
-        int sizeBytes = snapshotJson.getBytes(StandardCharsets.UTF_8).length;
-        if (sizeBytes > maxSnapshotBytes) {
+        } catch (SnapshotApplicationService.SnapshotTooLargeException e) {
             return Response.status(413)
-                    .entity(new ApiError(
-                            "PAYLOAD_TOO_LARGE",
-                            "Snapshot exceeds max size of " + maxSnapshotBytes + " bytes."))
+                    .entity(new ApiError("PAYLOAD_TOO_LARGE", e.getMessage()))
                     .build();
         }
-
-        BoardSnapshot created = snapshotsRepository.create(boardId, userId, snapshotJson);
-        return Response.status(Response.Status.CREATED)
-                .entity(SnapshotResponse.from(created, mapper))
-                .build();
     }
 
     @GET
@@ -121,12 +84,7 @@ public class BoardSnapshotsResource {
     })
     public SnapshotResponse latest(@Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId) {
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-
-        boardGuards.requireReadableAccess(boardId, userId);
-
-        BoardSnapshot latest = snapshotsRepository.getLatest(boardId).orElseThrow(NotFoundException::new);
-        return SnapshotResponse.from(latest, mapper);
+        return snapshotApplicationService.latest(boardId, Authz.userId(identity));
     }
 
     @GET
@@ -141,12 +99,7 @@ public class BoardSnapshotsResource {
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @Parameter(description = "Snapshot version number.", required = true, schema = @Schema(type = SchemaType.INTEGER, format = "int64")) @PathParam("version") long version) {
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-
-        boardGuards.requireReadableAccess(boardId, userId);
-
-        BoardSnapshot s = snapshotsRepository.get(boardId, version).orElseThrow(NotFoundException::new);
-        return SnapshotResponse.from(s, mapper);
+        return snapshotApplicationService.get(boardId, version, Authz.userId(identity));
     }
 
     @GET
@@ -159,11 +112,6 @@ public class BoardSnapshotsResource {
     })
     public SnapshotVersionsResponse versions(@Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId) {
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-
-        boardGuards.requireReadableAccess(boardId, userId);
-
-        List<Long> versions = snapshotsRepository.listVersions(boardId);
-        return new SnapshotVersionsResponse(versions);
+        return snapshotApplicationService.versions(boardId, Authz.userId(identity));
     }
 }

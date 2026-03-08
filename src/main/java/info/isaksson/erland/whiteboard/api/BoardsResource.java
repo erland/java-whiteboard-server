@@ -1,12 +1,10 @@
 package info.isaksson.erland.whiteboard.api;
 
 import java.util.List;
-import java.util.UUID;
 
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -30,12 +28,8 @@ import info.isaksson.erland.whiteboard.api.dto.BoardResponse;
 import info.isaksson.erland.whiteboard.api.dto.CreateBoardRequest;
 import info.isaksson.erland.whiteboard.api.dto.UpdateBoardRequest;
 import info.isaksson.erland.whiteboard.api.errors.ApiError;
-import info.isaksson.erland.whiteboard.domain.Board;
 import info.isaksson.erland.whiteboard.domain.BoardMetadataRules;
-import info.isaksson.erland.whiteboard.persistence.BoardsRepository;
 import info.isaksson.erland.whiteboard.security.Authz;
-import info.isaksson.erland.whiteboard.security.BoardAccessService;
-import info.isaksson.erland.whiteboard.security.BoardGuards;
 import io.quarkus.security.identity.SecurityIdentity;
 
 @Tag(name = "Boards")
@@ -45,23 +39,14 @@ import io.quarkus.security.identity.SecurityIdentity;
 @Consumes(MediaType.APPLICATION_JSON)
 public class BoardsResource {
 
-    private final BoardsRepository boardsRepository;
-    private final BoardAccessService boardAccess;
-    private final BoardGuards boardGuards;
-    private final BoardMetadataRules boardMetadataRules;
+    private final BoardsApplicationService boardsApplicationService;
     private final SecurityIdentity identity;
     private final ApiRequestSupport apiRequestSupport;
 
-    public BoardsResource(BoardsRepository boardsRepository,
-                          BoardAccessService boardAccess,
-                          BoardGuards boardGuards,
-                          BoardMetadataRules boardMetadataRules,
+    public BoardsResource(BoardsApplicationService boardsApplicationService,
                           SecurityIdentity identity,
                           ApiRequestSupport apiRequestSupport) {
-        this.boardsRepository = boardsRepository;
-        this.boardAccess = boardAccess;
-        this.boardGuards = boardGuards;
-        this.boardMetadataRules = boardMetadataRules;
+        this.boardsApplicationService = boardsApplicationService;
         this.identity = identity;
         this.apiRequestSupport = apiRequestSupport;
     }
@@ -72,10 +57,7 @@ public class BoardsResource {
     @APIResponse(responseCode = "401", description = "Authentication required.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
     public List<BoardResponse> list() {
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        return boardAccess.listAccessibleBoards(userId).stream()
-                .map(BoardResponse::from)
-                .toList();
+        return boardsApplicationService.list(Authz.userId(identity));
     }
 
     @POST
@@ -89,31 +71,12 @@ public class BoardsResource {
             @RequestBody(required = true, description = "Board creation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CreateBoardRequest.class)))
             CreateBoardRequest req) {
         Authz.requireUserOrAdmin(identity);
-
-        BoardMetadataRules.NormalizedCreate normalized;
         try {
-            normalized = boardMetadataRules.normalizeCreate(req);
+            BoardResponse created = boardsApplicationService.create(Authz.userId(identity), req);
+            return Response.status(Response.Status.CREATED).entity(created).build();
         } catch (BoardMetadataRules.ValidationException e) {
             return apiRequestSupport.validationError(e.getMessage());
         }
-
-        String userId = Authz.userId(identity);
-        String id = UUID.randomUUID().toString();
-
-        Board created = boardsRepository.create(new Board(
-                id,
-                normalized.name(),
-                normalized.type(),
-                normalized.boardType(),
-                userId,
-                BoardMetadataRules.STATUS_ACTIVE,
-                null,
-                null
-        ));
-
-        return Response.status(Response.Status.CREATED)
-                .entity(BoardResponse.from(created))
-                .build();
     }
 
     @GET
@@ -126,10 +89,7 @@ public class BoardsResource {
     })
     public BoardResponse get(@Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("id") String id) {
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-
-        Board b = boardGuards.requireReadableAccess(id, userId).board();
-        return BoardResponse.from(b);
+        return boardsApplicationService.get(id, Authz.userId(identity));
     }
 
     @PATCH
@@ -147,30 +107,13 @@ public class BoardsResource {
             @RequestBody(required = true, description = "Board metadata update request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = UpdateBoardRequest.class)))
             UpdateBoardRequest req) {
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-
-        Board existing = boardGuards.requireWritableAccess(id, userId).board();
-
-        BoardMetadataRules.NormalizedUpdate normalized;
         try {
-            normalized = boardMetadataRules.normalizeUpdate(req, existing);
+            return Response.ok(boardsApplicationService.update(id, Authz.userId(identity), req)).build();
         } catch (BoardMetadataRules.BoardNotActiveException e) {
             return Response.status(Response.Status.CONFLICT)
                     .entity(new ApiError("BOARD_NOT_ACTIVE", e.getMessage()))
                     .build();
         }
-
-        Board updated = boardsRepository.updateMetadata(
-                id,
-                userId,
-                normalized.name(),
-                normalized.type(),
-                normalized.boardType());
-        if (updated == null) {
-            throw new NotFoundException();
-        }
-
-        return Response.ok(BoardResponse.from(updated)).build();
     }
 
     @DELETE
@@ -183,15 +126,7 @@ public class BoardsResource {
     })
     public Response archive(@Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("id") String id) {
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-
-        boardGuards.requireOwner(id, userId);
-
-        boolean ok = boardsRepository.archive(id, userId);
-        if (!ok) {
-            throw new NotFoundException();
-        }
+        boardsApplicationService.archive(id, Authz.userId(identity));
         return Response.noContent().build();
     }
-
 }

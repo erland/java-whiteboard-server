@@ -190,6 +190,31 @@ public class InvitesResourceTest {
              .body("reason", is("NOT_FOUND"));
     }
 
+
+    @Test
+    @TestSecurity(user = "alice", roles = { "whiteboard-user" })
+    void revoke_invite_rejects_wrong_board_path() {
+        String boardId = UUID.randomUUID().toString();
+        String otherBoardId = UUID.randomUUID().toString();
+        boardsRepository.create(new Board(boardId, "B", "whiteboard", "advanced", "alice", "active", null, null));
+        boardsRepository.create(new Board(otherBoardId, "Other", "whiteboard", "advanced", "alice", "active", null, null));
+
+        String inviteId =
+            given()
+              .contentType("application/json")
+              .body("{\"permission\":\"viewer\"}")
+              .when().post("/api/boards/" + boardId + "/invites")
+              .then()
+                 .statusCode(201)
+                 .extract().path("id");
+
+        given()
+          .when().delete("/api/boards/" + otherBoardId + "/invites/" + inviteId)
+          .then()
+             .statusCode(404)
+             .body("code", is("NOT_FOUND"));
+    }
+
     @Test
     @TestSecurity(user = "bob", roles = { "whiteboard-user" })
     void other_user_gets_404_when_listing_invites_for_foreign_board() {

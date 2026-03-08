@@ -146,6 +146,28 @@ public class PublicationsResourceTest {
                 .statusCode(204);
     }
 
+
+    @Test
+    @TestSecurity(user = "alice", roles = { "whiteboard-user" })
+    void rotate_publication_token_rejects_wrong_board_path() {
+        String publicationId = given()
+                .contentType("application/json")
+                .body("{\"targetType\":\"board\"}")
+                .when().post("/api/boards/" + boardId + "/publications")
+                .then()
+                .statusCode(201)
+                .extract().path("publication.id");
+
+        String otherBoardId = UUID.randomUUID().toString();
+        boardsRepository.create(new Board(otherBoardId, "Other board", "whiteboard", "advanced", "alice", "active", Instant.now(), Instant.now()));
+
+        given()
+                .when().post("/api/boards/" + otherBoardId + "/publications/" + publicationId + "/rotate-token")
+                .then()
+                .statusCode(404)
+                .body("code", equalTo("NOT_FOUND"));
+    }
+
     @Test
     void resolve_publication_returns_metadata_for_valid_token() {
         String token = publicationService.createBoardPublication(boardId, "alice", null, false).accessToken();

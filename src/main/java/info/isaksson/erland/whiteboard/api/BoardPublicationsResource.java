@@ -1,25 +1,17 @@
 package info.isaksson.erland.whiteboard.api;
 
-import info.isaksson.erland.whiteboard.api.FeatureSupport;
-import java.time.Instant;
-import java.time.format.DateTimeParseException;
 import java.util.List;
 
 import info.isaksson.erland.whiteboard.api.dto.CreatePublicationRequest;
 import info.isaksson.erland.whiteboard.api.dto.PublicationCreatedResponse;
 import info.isaksson.erland.whiteboard.api.dto.PublicationResponse;
 import info.isaksson.erland.whiteboard.api.errors.ApiError;
-import info.isaksson.erland.whiteboard.publication.Publication;
-import info.isaksson.erland.whiteboard.publication.PublicationService;
-import info.isaksson.erland.whiteboard.publication.PublicationTargetType;
 import info.isaksson.erland.whiteboard.security.Authz;
-import info.isaksson.erland.whiteboard.security.BoardGuards;
 import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -45,10 +37,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 public class BoardPublicationsResource {
 
     @Inject
-    PublicationService publicationService;
-
-    @Inject
-    BoardGuards boardGuards;
+    PublicationApplicationService publicationApplicationService;
 
     @Inject
     SecurityIdentity identity;
@@ -74,38 +63,9 @@ public class BoardPublicationsResource {
             CreatePublicationRequest req) {
         featureSupport.requirePublicationsEnabled();
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        boardGuards.requireOwner(boardId, userId);
-
-        PublicationTargetType targetType;
         try {
-            targetType = parseTargetType(req == null ? null : req.targetType());
-        } catch (IllegalArgumentException e) {
-            return apiRequestSupport.validationError(e.getMessage());
-        }
-
-        Instant expiresAt;
-        try {
-            expiresAt = parseExpiresAt(req == null ? null : req.expiresAt());
-        } catch (IllegalArgumentException e) {
-            return apiRequestSupport.validationError(e.getMessage());
-        }
-
-        boolean allowComments = req != null && Boolean.TRUE.equals(req.allowComments());
-
-        try {
-            PublicationService.CreatedPublication created = switch (targetType) {
-                case BOARD -> publicationService.createBoardPublication(boardId, userId, expiresAt, allowComments);
-                case SNAPSHOT -> publicationService.createSnapshotPublication(
-                        boardId,
-                        requireSnapshotVersion(req),
-                        userId,
-                        expiresAt,
-                        allowComments);
-            };
-            return Response.status(Response.Status.CREATED)
-                    .entity(PublicationCreatedResponse.from(created))
-                    .build();
+            PublicationCreatedResponse created = publicationApplicationService.createPublication(boardId, Authz.userId(identity), req);
+            return Response.status(Response.Status.CREATED).entity(created).build();
         } catch (IllegalArgumentException e) {
             return apiRequestSupport.validationError(e.getMessage());
         }
@@ -123,11 +83,7 @@ public class BoardPublicationsResource {
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId) {
         featureSupport.requirePublicationsEnabled();
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        boardGuards.requireOwner(boardId, userId);
-        return publicationService.listForBoard(boardId).stream()
-                .map(PublicationResponse::from)
-                .toList();
+        return publicationApplicationService.listPublications(boardId, Authz.userId(identity));
     }
 
     @DELETE
@@ -143,13 +99,7 @@ public class BoardPublicationsResource {
             @Parameter(description = "Publication identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("publicationId") String publicationId) {
         featureSupport.requirePublicationsEnabled();
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        boardGuards.requireOwner(boardId, userId);
-        Publication publication = publicationService.findById(publicationId).orElseThrow(NotFoundException::new);
-        if (!publication.boardId().equals(boardId)) {
-            throw new NotFoundException();
-        }
-        publicationService.revoke(publicationId).orElseThrow(NotFoundException::new);
+        publicationApplicationService.revokePublication(boardId, publicationId, Authz.userId(identity));
         return Response.noContent().build();
     }
 
@@ -167,45 +117,6 @@ public class BoardPublicationsResource {
             @Parameter(description = "Publication identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("publicationId") String publicationId) {
         featureSupport.requirePublicationsEnabled();
         Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        boardGuards.requireOwner(boardId, userId);
-        Publication publication = publicationService.findById(publicationId).orElseThrow(NotFoundException::new);
-        if (!publication.boardId().equals(boardId)) {
-            throw new NotFoundException();
-        }
-        return publicationService.rotateAccessToken(publicationId)
-                .map(PublicationCreatedResponse::from)
-                .orElseThrow(NotFoundException::new);
+        return publicationApplicationService.rotatePublicationToken(boardId, publicationId, Authz.userId(identity));
     }
-
-    private static PublicationTargetType parseTargetType(String rawValue) {
-        if (rawValue == null || rawValue.isBlank()) {
-            return PublicationTargetType.BOARD;
-        }
-        try {
-            return PublicationTargetType.fromStorageValue(rawValue);
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Field 'targetType' must be 'board' or 'snapshot'.");
-        }
-    }
-
-    private static long requireSnapshotVersion(CreatePublicationRequest req) {
-        Long snapshotVersion = req == null ? null : req.snapshotVersion();
-        if (snapshotVersion == null || snapshotVersion <= 0) {
-            throw new IllegalArgumentException("Field 'snapshotVersion' must be a positive integer when targetType is 'snapshot'.");
-        }
-        return snapshotVersion;
-    }
-
-    private static Instant parseExpiresAt(String rawValue) {
-        if (rawValue == null || rawValue.isBlank()) {
-            return null;
-        }
-        try {
-            return Instant.parse(rawValue.trim());
-        } catch (DateTimeParseException e) {
-            throw new IllegalArgumentException("Field 'expiresAt' must be an ISO-8601 instant (e.g. 2026-01-01T00:00:00Z).");
-        }
-    }
-
 }
