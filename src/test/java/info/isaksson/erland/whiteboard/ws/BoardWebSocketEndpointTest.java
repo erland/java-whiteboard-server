@@ -13,6 +13,8 @@ import org.junit.jupiter.api.Test;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import info.isaksson.erland.whiteboard.config.FeatureToggles;
+import info.isaksson.erland.whiteboard.config.ProtocolCompatibility;
 import info.isaksson.erland.whiteboard.domain.BoardSnapshot;
 import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
 import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralAccessPolicy;
@@ -261,6 +263,26 @@ class BoardWebSocketEndpointTest {
     }
 
     @Test
+    void onOpen_joinedIncludesProtocolVersionAndCapabilities() throws Exception {
+        EndpointFixture fixture = newFixture(new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")), new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState state = openSession(fixture, "board-1", "alice", "editor");
+        JsonNode joined = mapper.readTree(state.sentTexts.get(0));
+        assertEquals(1, joined.get("protocolVersion").asInt());
+        assertTrue(joined.withArray("capabilities").toString().contains("ws-ephemeral"));
+    }
+
+    @Test
+    void onOpen_incompatibleProtocolVersion_returnsErrorAndCloses() throws Exception {
+        EndpointFixture fixture = newFixture(new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")), new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState state = TestWsSupport.newSession(URI.create("ws://localhost/ws/boards/board-1?protocolVersion=2"), Map.of("protocolVersion", List.of("2")), null);
+        fixture.endpoint.onOpen(state.session, "board-1");
+        JsonNode error = mapper.readTree(state.sentTexts.get(0));
+        assertEquals("INCOMPATIBLE_PROTOCOL", error.get("code").asText());
+        assertNotNull(state.closeReason);
+        assertEquals(CloseReason.CloseCodes.VIOLATED_POLICY, state.closeReason.getCloseCode());
+    }
+
+    @Test
     void onMessage_ephemeralDoesNotAdvanceOperationSequence() throws Exception {
         EndpointFixture fixture = newFixture(
                 new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
@@ -273,6 +295,15 @@ class BoardWebSocketEndpointTest {
         JsonNode op = mapper.readTree(state.sentTexts.get(state.sentTexts.size() - 1));
         assertEquals("op", op.get("type").asText());
         assertEquals(1L, op.get("seq").asLong());
+    }
+
+    @Test
+    void onMessage_whenEphemeralDisabled_returnsFeatureDisabled() throws Exception {
+        EndpointFixture fixture = newFixture(new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")), new FixedSnapshotsRepository(null), false);
+        TestWsSupport.TestSessionState state = openSession(fixture, "board-1", "alice", "editor", false);
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"cursor\",\"payload\":{\"x\":1}}", state.session);
+        JsonNode error = mapper.readTree(state.sentTexts.get(state.sentTexts.size() - 1));
+        assertEquals("FEATURE_DISABLED", error.get("code").asText());
     }
 
     @Test
@@ -292,12 +323,17 @@ class BoardWebSocketEndpointTest {
     }
 
     private TestWsSupport.TestSessionState openSession(EndpointFixture fixture, String boardId, String userId, String permission) {
+        return openSession(fixture, boardId, userId, permission, true);
+    }
+
+    private TestWsSupport.TestSessionState openSession(EndpointFixture fixture, String boardId, String userId, String permission, boolean ephemeralEnabled) {
         fixture.endpoint.lifecycleService = new WsLifecycleService(
                 new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", userId, permission)),
                 new WsAuthResolver(null),
                 fixture.sessionRegistry,
                 fixture.presenceHub,
                 fixture.ephemeralStateRegistry,
+                contractSupport(ephemeralEnabled),
                 fixture.limits,
                 fixture.metrics,
                 fixture.outboundSupport);
@@ -307,6 +343,10 @@ class BoardWebSocketEndpointTest {
     }
 
     private EndpointFixture newFixture(BoardJoinAuthorizer authorizer, SnapshotsRepository snapshotsRepository) {
+        return newFixture(authorizer, snapshotsRepository, true);
+    }
+
+    private EndpointFixture newFixture(BoardJoinAuthorizer authorizer, SnapshotsRepository snapshotsRepository, boolean ephemeralEnabled) {
         BoardWebSocketEndpoint endpoint = new BoardWebSocketEndpoint();
         PresenceHub presenceHub = new PresenceHub();
         WsSessionRegistry sessionRegistry = new WsSessionRegistry();
@@ -326,6 +366,7 @@ class BoardWebSocketEndpointTest {
                 sessionRegistry,
                 presenceHub,
                 ephemeralStateRegistry,
+                contractSupport(ephemeralEnabled),
                 limits,
                 metrics,
                 outboundSupport);
@@ -335,8 +376,22 @@ class BoardWebSocketEndpointTest {
                 limits,
                 metrics,
                 outboundSupport,
-                new EphemeralInboundMessageHandler(new EphemeralAccessPolicy(), ephemeralStateRegistry, outboundSupport));
+                new EphemeralInboundMessageHandler(new EphemeralAccessPolicy(), ephemeralStateRegistry, outboundSupport),
+                contractSupport(ephemeralEnabled));
         return new EndpointFixture(endpoint, presenceHub, sessionRegistry, ephemeralStateRegistry, limits, metrics, outboundSupport);
+    }
+
+    private WsContractSupport contractSupport(boolean ephemeralEnabled) {
+        ProtocolCompatibility compatibility = new ProtocolCompatibility();
+        compatibility.apiVersion = 1;
+        compatibility.wsProtocolVersion = 1;
+        compatibility.requireClientWsVersion = false;
+        FeatureToggles toggles = new FeatureToggles();
+        toggles.publicationsEnabled = true;
+        toggles.commentsEnabled = true;
+        toggles.assetsEnabled = true;
+        toggles.wsEphemeralEnabled = ephemeralEnabled;
+        return new WsContractSupport(compatibility, toggles);
     }
 
     private record EndpointFixture(

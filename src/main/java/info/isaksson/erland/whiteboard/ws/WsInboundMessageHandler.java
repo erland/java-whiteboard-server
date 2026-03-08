@@ -21,6 +21,7 @@ class WsInboundMessageHandler {
     private final WsMetrics metrics;
     private final WsOutboundSupport outboundSupport;
     private final EphemeralInboundMessageHandler ephemeralInboundMessageHandler;
+    private final WsContractSupport contractSupport;
 
     @Inject
     WsInboundMessageHandler(ObjectMapper mapper,
@@ -28,13 +29,15 @@ class WsInboundMessageHandler {
                             WsLimits limits,
                             WsMetrics metrics,
                             WsOutboundSupport outboundSupport,
-                            EphemeralInboundMessageHandler ephemeralInboundMessageHandler) {
+                            EphemeralInboundMessageHandler ephemeralInboundMessageHandler,
+                            WsContractSupport contractSupport) {
         this.mapper = mapper;
         this.opSequencer = opSequencer;
         this.limits = limits;
         this.metrics = metrics;
         this.outboundSupport = outboundSupport;
         this.ephemeralInboundMessageHandler = ephemeralInboundMessageHandler;
+        this.contractSupport = contractSupport;
     }
 
     void handle(String message, Session session) {
@@ -66,6 +69,11 @@ class WsInboundMessageHandler {
 
         String type = root.hasNonNull("type") ? root.get("type").asText() : "";
         if ("ephemeral".equals(type)) {
+            if (!contractSupport.ephemeralEnabled()) {
+                metrics.incRejected("ephemeral_disabled");
+                outboundSupport.send(session, new WsMessage.Error("FEATURE_DISABLED", "Ephemeral events are disabled on this server.", contractSupport.protocolVersion(), contractSupport.capabilities()));
+                return;
+            }
             if (!consumeRateLimit(session, WsSessionProps.EPHEMERAL_RATE_LIMITER, "ephemeral_rate_limited")) {
                 return;
             }

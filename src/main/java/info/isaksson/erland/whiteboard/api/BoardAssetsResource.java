@@ -1,5 +1,6 @@
 package info.isaksson.erland.whiteboard.api;
 
+import info.isaksson.erland.whiteboard.api.FeatureSupport;
 import info.isaksson.erland.whiteboard.api.dto.ActivateAssetRequest;
 import info.isaksson.erland.whiteboard.api.dto.AssetFailureRequest;
 import info.isaksson.erland.whiteboard.api.dto.AssetResponse;
@@ -55,6 +56,9 @@ public class BoardAssetsResource {
     @Inject
     SecurityIdentity identity;
 
+    @Inject
+    FeatureSupport featureSupport;
+
     @GET
     @Path("/{boardId}/assets")
     @Operation(summary = "List board assets", description = "Lists durable asset metadata for a board. Authenticated members may list assets they can use. Anonymous publication readers may list assets when a valid publication token is supplied.")
@@ -65,6 +69,7 @@ public class BoardAssetsResource {
     public List<AssetResponse> listAssets(
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @Parameter(description = "Optional publication token for anonymous publication access.", required = false, schema = @Schema(type = SchemaType.STRING)) @QueryParam("publicationToken") String publicationToken) {
+        featureSupport.requireAssetsEnabled();
         Publication publication = resolveReadablePublication(boardId, publicationToken);
         if (!identity.isAnonymous()) {
             String userId = Authz.userId(identity);
@@ -90,6 +95,7 @@ public class BoardAssetsResource {
     public Response createAsset(@PathParam("boardId") String boardId,
                                 @RequestBody(required = true, description = "Asset metadata creation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CreateAssetRequest.class)))
                                 CreateAssetRequest req) {
+        featureSupport.requireAssetsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         boardGuards.requireAssetManageAccess(boardId, userId);
@@ -117,6 +123,7 @@ public class BoardAssetsResource {
     public Response activateAsset(@PathParam("boardId") String boardId,
                                   @PathParam("assetId") String assetId,
                                   ActivateAssetRequest req) {
+        featureSupport.requireAssetsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         boardGuards.requireAssetManageAccess(boardId, userId);
@@ -182,6 +189,7 @@ public class BoardAssetsResource {
     @Operation(summary = "Delete asset metadata", description = "Marks an existing board asset deleted. Binary cleanup remains the responsibility of the surrounding storage workflow.")
     public Response deleteAsset(@PathParam("boardId") String boardId,
                                 @PathParam("assetId") String assetId) {
+        featureSupport.requireAssetsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         boardGuards.requireAssetManageAccess(boardId, userId);

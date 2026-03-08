@@ -15,6 +15,7 @@ public class WsHandshakeConfigurator extends ServerEndpointConfig.Configurator {
 
     public static final String AUTHORIZATION_HEADER = "Authorization";
     public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
+    public static final String PROTOCOL_VERSION_HEADER = "X-Whiteboard-Protocol-Version";
     public static final String PROP_CORRELATION_ID = "correlationId";
 
     @Override
@@ -26,6 +27,11 @@ public class WsHandshakeConfigurator extends ServerEndpointConfig.Configurator {
             String auth = firstHeaderIgnoreCase(headers, AUTHORIZATION_HEADER);
             if (auth != null && !auth.isBlank()) {
                 sec.getUserProperties().put(AUTHORIZATION_HEADER, auth);
+            }
+
+            String protocolVersion = firstHeaderIgnoreCase(headers, PROTOCOL_VERSION_HEADER);
+            if (protocolVersion != null && !protocolVersion.isBlank()) {
+                sec.getUserProperties().put(PROTOCOL_VERSION_HEADER, protocolVersion);
             }
 
             String correlationId = firstHeaderIgnoreCase(headers, CORRELATION_ID_HEADER);

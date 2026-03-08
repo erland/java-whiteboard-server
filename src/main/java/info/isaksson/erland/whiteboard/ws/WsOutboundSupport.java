@@ -41,7 +41,13 @@ public class WsOutboundSupport {
         this.metrics = metrics;
     }
 
-    void sendJoined(Session session, String boardId, String effectiveUserId, String wsSessionId, String correlationId) {
+    void sendJoined(Session session,
+                    String boardId,
+                    String effectiveUserId,
+                    String wsSessionId,
+                    String correlationId,
+                    int protocolVersion,
+                    java.util.List<String> capabilities) {
         Long latestVersion = null;
         JsonNode latestSnapshot = null;
         try {
@@ -54,7 +60,7 @@ public class WsOutboundSupport {
         }
 
         Map<String, PresenceHub.UserPresence> users = presenceHub.snapshot(boardId);
-        send(session, new WsMessage.Joined(boardId, effectiveUserId, latestVersion, latestSnapshot, usersToJson(users), wsSessionId, correlationId));
+        send(session, new WsMessage.Joined(boardId, effectiveUserId, latestVersion, latestSnapshot, usersToJson(users), wsSessionId, correlationId, protocolVersion, capabilities));
     }
 
     void broadcastPresence(String boardId) {

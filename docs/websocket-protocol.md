@@ -156,6 +156,12 @@ Current server message families:
 - `ephemeral`
 - `error`
 
+Compatibility notes:
+- clients may send `protocolVersion` as a query parameter or `X-Whiteboard-Protocol-Version` as a handshake header
+- when the client provides an unsupported version, the server sends an `error` with code `INCOMPATIBLE_PROTOCOL` and closes the connection
+- the `joined` message includes `protocolVersion` and `capabilities` so clients can adapt safely
+- ephemeral event handling may be disabled with the `whiteboard.features.ws.ephemeral.enabled` toggle
+
 ## Server-to-client messages
 
 ### `joined`

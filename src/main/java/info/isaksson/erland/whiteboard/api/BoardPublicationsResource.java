@@ -1,5 +1,6 @@
 package info.isaksson.erland.whiteboard.api;
 
+import info.isaksson.erland.whiteboard.api.FeatureSupport;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.util.List;
@@ -52,6 +53,9 @@ public class BoardPublicationsResource {
     @Inject
     SecurityIdentity identity;
 
+    @Inject
+    FeatureSupport featureSupport;
+
     @POST
     @Path("/{boardId}/publications")
     @Operation(summary = "Create publication", description = "Creates a publication for a board or a specific snapshot. Only the board owner may create publications.")
@@ -65,6 +69,7 @@ public class BoardPublicationsResource {
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @RequestBody(required = true, description = "Publication creation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CreatePublicationRequest.class)))
             CreatePublicationRequest req) {
+        featureSupport.requirePublicationsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         boardGuards.requireOwner(boardId, userId);
@@ -113,6 +118,7 @@ public class BoardPublicationsResource {
     })
     public List<PublicationResponse> listPublications(
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId) {
+        featureSupport.requirePublicationsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         boardGuards.requireOwner(boardId, userId);
@@ -132,6 +138,7 @@ public class BoardPublicationsResource {
     public Response revokePublication(
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @Parameter(description = "Publication identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("publicationId") String publicationId) {
+        featureSupport.requirePublicationsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         boardGuards.requireOwner(boardId, userId);
@@ -155,6 +162,7 @@ public class BoardPublicationsResource {
     public PublicationCreatedResponse rotatePublicationToken(
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @Parameter(description = "Publication identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("publicationId") String publicationId) {
+        featureSupport.requirePublicationsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         boardGuards.requireOwner(boardId, userId);

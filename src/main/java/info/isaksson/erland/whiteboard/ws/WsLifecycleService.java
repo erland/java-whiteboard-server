@@ -20,6 +20,7 @@ class WsLifecycleService {
     private final WsSessionRegistry sessionRegistry;
     private final PresenceHub presenceHub;
     private final EphemeralStateRegistry ephemeralStateRegistry;
+    private final WsContractSupport contractSupport;
     private final WsLimits limits;
     private final WsMetrics metrics;
     private final WsOutboundSupport outboundSupport;
@@ -30,6 +31,7 @@ class WsLifecycleService {
                        WsSessionRegistry sessionRegistry,
                        PresenceHub presenceHub,
                        EphemeralStateRegistry ephemeralStateRegistry,
+                       WsContractSupport contractSupport,
                        WsLimits limits,
                        WsMetrics metrics,
                        WsOutboundSupport outboundSupport) {
@@ -38,6 +40,7 @@ class WsLifecycleService {
         this.sessionRegistry = sessionRegistry;
         this.presenceHub = presenceHub;
         this.ephemeralStateRegistry = ephemeralStateRegistry;
+        this.contractSupport = contractSupport;
         this.limits = limits;
         this.metrics = metrics;
         this.outboundSupport = outboundSupport;
@@ -48,6 +51,14 @@ class WsLifecycleService {
 
         LOG.debugf("WS opening boardId=%s connectionId=%s wsSessionId=%s requestUri=%s",
                 boardId, context.connectionId(), context.wsSessionId(), session == null ? null : session.getRequestURI());
+
+        var versionDecision = contractSupport.check(session);
+        if (!versionDecision.allowed()) {
+            metrics.incRejected("incompatible_protocol");
+            outboundSupport.send(session, new WsMessage.Error(versionDecision.code(), versionDecision.message(), contractSupport.protocolVersion(), contractSupport.capabilities()));
+            outboundSupport.close(session, CloseReason.CloseCodes.VIOLATED_POLICY, "Incompatible protocol");
+            return;
+        }
 
         BoardJoinAuthorizer.JoinDecision decision = authorizer.authorize(boardId, authResolver.resolveUserId(session), context.inviteToken());
         if (!decision.allowed()) {
@@ -77,7 +88,9 @@ class WsLifecycleService {
                 boardId,
                 accepted.effectiveUserId(),
                 accepted.wsSessionId(),
-                accepted.correlationId());
+                accepted.correlationId(),
+                contractSupport.protocolVersion(),
+                contractSupport.capabilities());
         outboundSupport.broadcastPresence(boardId);
 
         metrics.joinAccepted();

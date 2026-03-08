@@ -1,5 +1,6 @@
 package info.isaksson.erland.whiteboard.api;
 
+import info.isaksson.erland.whiteboard.api.FeatureSupport;
 import java.util.List;
 
 import info.isaksson.erland.whiteboard.api.dto.CommentResponse;
@@ -56,6 +57,9 @@ public class BoardCommentsResource {
     @Inject
     SecurityIdentity identity;
 
+    @Inject
+    FeatureSupport featureSupport;
+
     @GET
     @Path("/{boardId}/comments")
     @Operation(summary = "List comments", description = "Lists durable comments for a board. Authenticated members may always list comments they can read. Publication readers may list comments only when a valid publication token is supplied and the publication explicitly allows comments.")
@@ -66,6 +70,7 @@ public class BoardCommentsResource {
     public List<CommentResponse> listComments(
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @Parameter(description = "Optional publication token used for anonymous publication comment visibility when enabled.", required = false, schema = @Schema(type = SchemaType.STRING)) @QueryParam("publicationToken") String publicationToken) {
+        featureSupport.requireCommentsEnabled();
         Publication publication = resolveReadablePublication(boardId, publicationToken);
         if (!identity.isAnonymous()) {
             String userId = Authz.userId(identity);
@@ -92,6 +97,7 @@ public class BoardCommentsResource {
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @RequestBody(required = true, description = "Comment creation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CreateCommentRequest.class)))
             CreateCommentRequest req) {
+        featureSupport.requireCommentsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         boardGuards.requireCommentParticipation(boardId, userId, false);
@@ -130,6 +136,7 @@ public class BoardCommentsResource {
             @PathParam("boardId") String boardId,
             @PathParam("commentId") String commentId,
             UpdateCommentRequest req) {
+        featureSupport.requireCommentsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         boardGuards.requireCommentParticipation(boardId, userId, false);
@@ -154,6 +161,7 @@ public class BoardCommentsResource {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Resolve comment", description = "Resolves a comment. The comment author or a board writer may resolve the comment.")
     public Response resolveComment(@PathParam("boardId") String boardId, @PathParam("commentId") String commentId) {
+        featureSupport.requireCommentsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         ensureCanManageLifecycle(boardId, commentId, userId);
@@ -174,6 +182,7 @@ public class BoardCommentsResource {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Reopen comment", description = "Reopens a resolved comment. The comment author or a board writer may reopen the comment.")
     public Response reopenComment(@PathParam("boardId") String boardId, @PathParam("commentId") String commentId) {
+        featureSupport.requireCommentsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         ensureCanManageLifecycle(boardId, commentId, userId);
@@ -193,6 +202,7 @@ public class BoardCommentsResource {
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Delete comment", description = "Marks a comment as deleted. The comment author or a board writer may delete the comment.")
     public Response deleteComment(@PathParam("boardId") String boardId, @PathParam("commentId") String commentId) {
+        featureSupport.requireCommentsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         ensureCanManageLifecycle(boardId, commentId, userId);

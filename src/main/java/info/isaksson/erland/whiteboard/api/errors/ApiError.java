@@ -19,7 +19,11 @@ public record ApiError(
                 "COMMENT_STATE_INVALID",
                 "ASSET_NOT_FOUND",
                 "ASSET_STATE_INVALID",
-                "PAYLOAD_TOO_LARGE"
+                "PAYLOAD_TOO_LARGE",
+                "INCOMPATIBLE_API_VERSION",
+                "INCOMPATIBLE_PROTOCOL",
+                "FEATURE_DISABLED",
+                "WS_PROTOCOL_VERSION_REQUIRED"
         })
         String code,
         @Schema(description = "Human-readable explanation of the error.", example = "Field 'token' is required.")

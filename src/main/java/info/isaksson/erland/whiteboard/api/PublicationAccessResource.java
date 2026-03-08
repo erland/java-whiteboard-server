@@ -1,5 +1,6 @@
 package info.isaksson.erland.whiteboard.api;
 
+import info.isaksson.erland.whiteboard.api.FeatureSupport;
 import info.isaksson.erland.whiteboard.api.dto.PublicationResponse;
 import info.isaksson.erland.whiteboard.api.dto.ResolvePublicationRequest;
 import info.isaksson.erland.whiteboard.api.errors.ApiError;
@@ -28,6 +29,9 @@ public class PublicationAccessResource {
     @Inject
     PublicationPolicy publicationPolicy;
 
+    @Inject
+    FeatureSupport featureSupport;
+
     @POST
     @Path("/resolve")
     @Operation(summary = "Resolve publication", description = "Resolves publication access material into publication metadata without requiring authentication.")
@@ -39,6 +43,7 @@ public class PublicationAccessResource {
     public Response resolvePublication(
             @RequestBody(required = true, description = "Publication resolve request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ResolvePublicationRequest.class)))
             ResolvePublicationRequest req) {
+        featureSupport.requirePublicationsEnabled();
         String token = req == null ? null : req.token();
         if (token == null || token.isBlank()) {
             return Response.status(Response.Status.BAD_REQUEST)
