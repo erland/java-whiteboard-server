@@ -156,11 +156,21 @@ Current server message families:
 - `ephemeral`
 - `error`
 
+Capabilities exposed in `joined` and `/api/capabilities` may therefore include:
+- `ws-ephemeral`
+- `voting`
+- `ws-reactions`
+- `shared-timer`
+- `ws-voting-events`
+
 Compatibility notes:
 - clients may send `protocolVersion` as a query parameter or `X-Whiteboard-Protocol-Version` as a handshake header
 - when the client provides an unsupported version, the server sends an `error` with code `INCOMPATIBLE_PROTOCOL` and closes the connection
 - the `joined` message includes `protocolVersion` and `capabilities` so clients can adapt safely
 - ephemeral event handling may be disabled with the `whiteboard.features.ws.ephemeral.enabled` toggle
+- reaction events may be disabled independently with `whiteboard.features.ws.reactions.enabled`
+- shared timer control/state events may be disabled independently with `whiteboard.features.timer.enabled`
+- server-originated voting realtime notifications may be disabled independently with `whiteboard.features.ws.voting-events.enabled`
 
 ## Server-to-client messages
 

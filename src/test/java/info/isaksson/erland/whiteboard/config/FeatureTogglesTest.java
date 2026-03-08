@@ -14,6 +14,9 @@ class FeatureTogglesTest {
         toggles.assetsEnabled = true;
         toggles.wsEphemeralEnabled = false;
         toggles.votingEnabled = true;
-        assertEquals(java.util.List.of("publications", "assets", "voting"), toggles.enabledCapabilities());
+        toggles.wsReactionsEnabled = true;
+        toggles.timerEnabled = false;
+        toggles.wsVotingEventsEnabled = true;
+        assertEquals(java.util.List.of("publications", "assets", "voting", "ws-reactions", "ws-voting-events"), toggles.enabledCapabilities());
     }
 }

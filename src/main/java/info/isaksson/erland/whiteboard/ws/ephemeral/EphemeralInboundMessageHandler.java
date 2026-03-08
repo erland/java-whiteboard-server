@@ -6,6 +6,7 @@ import jakarta.websocket.Session;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
+import info.isaksson.erland.whiteboard.config.FeatureToggles;
 import info.isaksson.erland.whiteboard.ws.TokenBucketRateLimiter;
 import info.isaksson.erland.whiteboard.ws.WsMessage;
 import info.isaksson.erland.whiteboard.ws.WsMetrics;
@@ -22,6 +23,7 @@ public class EphemeralInboundMessageHandler {
     private final TimerControlPayloadValidator timerControlPayloadValidator;
     private final WsOutboundSupport outboundSupport;
     private final WsMetrics metrics;
+    private final FeatureToggles featureToggles;
 
     @Inject
     public EphemeralInboundMessageHandler(EphemeralAccessPolicy accessPolicy,
@@ -30,7 +32,8 @@ public class EphemeralInboundMessageHandler {
                                           ReactionPayloadValidator reactionPayloadValidator,
                                           TimerControlPayloadValidator timerControlPayloadValidator,
                                           WsOutboundSupport outboundSupport,
-                                          WsMetrics metrics) {
+                                          WsMetrics metrics,
+                                          FeatureToggles featureToggles) {
         this.accessPolicy = accessPolicy;
         this.stateRegistry = stateRegistry;
         this.timerStateRegistry = timerStateRegistry;
@@ -38,6 +41,19 @@ public class EphemeralInboundMessageHandler {
         this.timerControlPayloadValidator = timerControlPayloadValidator;
         this.outboundSupport = outboundSupport;
         this.metrics = metrics;
+        this.featureToggles = featureToggles;
+    }
+
+    public EphemeralInboundMessageHandler(EphemeralAccessPolicy accessPolicy,
+                                          EphemeralStateRegistry stateRegistry,
+                                          TimerEphemeralStateRegistry timerStateRegistry,
+                                          ReactionPayloadValidator reactionPayloadValidator,
+                                          TimerControlPayloadValidator timerControlPayloadValidator,
+                                          WsOutboundSupport outboundSupport,
+                                          WsMetrics metrics) {
+        this(accessPolicy, stateRegistry, timerStateRegistry, reactionPayloadValidator, timerControlPayloadValidator, outboundSupport, metrics, new FeatureToggles());
+        this.featureToggles.wsReactionsEnabled = true;
+        this.featureToggles.timerEnabled = true;
     }
 
     public void handle(JsonNode root,
@@ -64,6 +80,17 @@ public class EphemeralInboundMessageHandler {
             return;
         }
 
+
+        if (eventType == EphemeralEventType.REACTION && featureToggles != null && !featureToggles.wsReactionsEnabled()) {
+            metrics.incRejected("reaction_disabled");
+            outboundSupport.send(session, new WsMessage.Error("FEATURE_DISABLED", "Reaction events are disabled on this server."));
+            return;
+        }
+        if ((eventType == EphemeralEventType.TIMER_CONTROL || eventType == EphemeralEventType.TIMER_STATE) && featureToggles != null && !featureToggles.timerEnabled()) {
+            metrics.incRejected("timer_disabled");
+            outboundSupport.send(session, new WsMessage.Error("FEATURE_DISABLED", "Shared timer events are disabled on this server."));
+            return;
+        }
         if (!accessPolicy.canEmit(permission, eventType)) {
             outboundSupport.send(session, new WsMessage.Error("FORBIDDEN", "You do not have permission to publish this ephemeral event."));
             return;

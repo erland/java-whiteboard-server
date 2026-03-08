@@ -2,6 +2,7 @@ package info.isaksson.erland.whiteboard.voting;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import info.isaksson.erland.whiteboard.config.FeatureToggles;
 import info.isaksson.erland.whiteboard.ws.WsMessage;
 import info.isaksson.erland.whiteboard.ws.WsOutboundSupport;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -12,14 +13,17 @@ public class VotingWsNotifier {
 
     private final ObjectMapper mapper;
     private final WsOutboundSupport outboundSupport;
+    private final FeatureToggles featureToggles;
 
     @Inject
-    public VotingWsNotifier(ObjectMapper mapper, WsOutboundSupport outboundSupport) {
+    public VotingWsNotifier(ObjectMapper mapper, WsOutboundSupport outboundSupport, FeatureToggles featureToggles) {
         this.mapper = mapper;
         this.outboundSupport = outboundSupport;
+        this.featureToggles = featureToggles;
     }
 
     public void sessionOpened(VotingSession session, VotingResults publicResults) {
+        if (!featureToggles.wsVotingEventsEnabled()) return;
         ObjectNode payload = sessionPayload(session);
         payload.set("results", resultsPayload(publicResults));
         outboundSupport.broadcastEphemeral(session.boardId(), new WsMessage.Ephemeral(
@@ -32,6 +36,7 @@ public class VotingWsNotifier {
     }
 
     public void sessionClosed(VotingSession session, VotingResults publicResults) {
+        if (!featureToggles.wsVotingEventsEnabled()) return;
         ObjectNode payload = sessionPayload(session);
         payload.set("results", resultsPayload(publicResults));
         outboundSupport.broadcastEphemeral(session.boardId(), new WsMessage.Ephemeral(
@@ -44,6 +49,7 @@ public class VotingWsNotifier {
     }
 
     public void resultsRevealed(VotingSession session, VotingResults publicResults) {
+        if (!featureToggles.wsVotingEventsEnabled()) return;
         ObjectNode payload = sessionPayload(session);
         payload.set("results", resultsPayload(publicResults));
         outboundSupport.broadcastEphemeral(session.boardId(), new WsMessage.Ephemeral(
@@ -56,6 +62,7 @@ public class VotingWsNotifier {
     }
 
     public void votesUpdated(VotingSession session, VotingResults publicResults, String actorUserId) {
+        if (!featureToggles.wsVotingEventsEnabled()) return;
         ObjectNode payload = sessionPayload(session);
         payload.put("actorUserId", actorUserId);
         payload.set("results", resultsPayload(publicResults));

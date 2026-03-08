@@ -1,11 +1,15 @@
 package info.isaksson.erland.whiteboard.ws.ephemeral;
 
+import info.isaksson.erland.whiteboard.config.FeatureToggles;
 import info.isaksson.erland.whiteboard.security.BoardAccessService;
 import info.isaksson.erland.whiteboard.security.BoardCapability;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 
 @ApplicationScoped
 public class EphemeralAccessPolicy {
+
+    @Inject FeatureToggles featureToggles;
 
     public boolean canEmit(String permission, EphemeralEventType eventType) {
         if (permission == null || eventType == null) {
@@ -25,7 +29,19 @@ public class EphemeralAccessPolicy {
         if (permission == null || eventType == null || eventType.isBlank()) {
             return false;
         }
-        BoardCapability capability = switch (eventType.trim().toLowerCase()) {
+        String normalized = eventType.trim().toLowerCase();
+        if ("reaction".equals(normalized) && featureToggles != null && !featureToggles.wsReactionsEnabled()) {
+            return false;
+        }
+        if ("timer-state".equals(normalized) && featureToggles != null && !featureToggles.timerEnabled()) {
+            return false;
+        }
+        if (("voting-session-opened".equals(normalized) || "voting-votes-updated".equals(normalized)
+                || "voting-session-closed".equals(normalized) || "voting-results-revealed".equals(normalized))
+                && featureToggles != null && !featureToggles.wsVotingEventsEnabled()) {
+            return false;
+        }
+        BoardCapability capability = switch (normalized) {
             case "reaction" -> BoardCapability.REACTION_OBSERVE;
             case "timer-state" -> BoardCapability.TIMER_OBSERVE;
             case "voting-session-opened", "voting-votes-updated", "voting-session-closed", "voting-results-revealed" -> BoardCapability.VOTE_OBSERVE;

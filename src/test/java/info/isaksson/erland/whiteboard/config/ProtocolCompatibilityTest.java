@@ -7,6 +7,24 @@ import org.junit.jupiter.api.Test;
 class ProtocolCompatibilityTest {
 
     @Test
+    void isSupportedApiVersion_accepts_blank_or_exact_match() {
+        ProtocolCompatibility compatibility = new ProtocolCompatibility();
+        compatibility.apiVersion = 1;
+        assertTrue(compatibility.isSupportedApiVersion(null));
+        assertTrue(compatibility.isSupportedApiVersion("1"));
+        assertFalse(compatibility.isSupportedApiVersion("2"));
+    }
+
+    @Test
+    void evaluateWsVersion_rejects_non_numeric_version() {
+        ProtocolCompatibility compatibility = new ProtocolCompatibility();
+        compatibility.wsProtocolVersion = 1;
+        ProtocolCompatibility.WsVersionDecision decision = compatibility.evaluateWsVersion("abc");
+        assertFalse(decision.allowed());
+        assertEquals("INCOMPATIBLE_PROTOCOL", decision.code());
+    }
+
+    @Test
     void evaluateWsVersion_allowsMissingVersionByDefault() {
         ProtocolCompatibility compatibility = new ProtocolCompatibility();
         compatibility.wsProtocolVersion = 1;
