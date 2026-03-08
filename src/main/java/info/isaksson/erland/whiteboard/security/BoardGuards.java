@@ -49,12 +49,52 @@ public class BoardGuards {
         return requireCapability(boardId, userId, BoardCapability.BOARD_WRITE, false);
     }
 
+    public BoardAccessService.Access requireFacilitationAccess(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.FACILITATE_BOARD, false);
+    }
+
     public BoardAccessService.Access requirePublicationReadAccess(String boardId, String userId, boolean publicationReadable) {
         return requireCapability(boardId, userId, BoardCapability.PUBLICATION_READ, publicationReadable);
     }
 
     public BoardAccessService.Access requireCommentParticipation(String boardId, String userId, boolean publicationReadable) {
         return requireCapability(boardId, userId, BoardCapability.COMMENT_PARTICIPATE, publicationReadable);
+    }
+
+    public BoardAccessService.Access requireVoteParticipationAccess(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.VOTE_PARTICIPATE, publicationReadable);
+    }
+
+    public BoardAccessService.Access requireVoteObservationAccess(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.VOTE_OBSERVE, publicationReadable);
+    }
+
+    public BoardAccessService.Access requireTimerControlAccess(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.TIMER_CONTROL, false);
+    }
+
+    public BoardAccessService.Access requireTimerObservationAccess(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.TIMER_OBSERVE, publicationReadable);
+    }
+
+    public BoardAccessService.Access requireReactionEmitAccess(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.REACTION_EMIT, publicationReadable);
+    }
+
+    public BoardAccessService.Access requireReactionObservationAccess(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.REACTION_OBSERVE, publicationReadable);
+    }
+
+    public BoardAccessService.Access requirePrivateModeContributionAccess(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.PRIVATE_MODE_CONTRIBUTE, publicationReadable);
+    }
+
+    public BoardAccessService.Access requirePrivateModeRevealAccess(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.PRIVATE_MODE_REVEAL, false);
+    }
+
+    public BoardAccessService.Access requirePrivateModeViewAccess(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.PRIVATE_MODE_VIEW, publicationReadable);
     }
 
     public BoardAccessService.Access requireAssetUseAccess(String boardId, String userId, boolean publicationReadable) {

@@ -4,7 +4,7 @@
 
 This document specifies the realtime WebSocket protocol used by `java-whiteboard-server` for collaborative board sessions.
 
-It complements the generated REST API documentation. The REST API covers board metadata, snapshots, and invites. This document covers the bidirectional realtime protocol used at runtime by connected whiteboard clients.
+It complements the generated REST API documentation. The REST API covers board metadata, snapshots, invites, publications, comments, assets, and voting. This document covers the bidirectional realtime protocol used at runtime by connected whiteboard clients.
 
 ## Endpoint
 
@@ -277,7 +277,7 @@ Sequencing rules:
 
 
 ### `ephemeral`
-Broadcast to all currently connected sessions for a board when a participant publishes a non-durable collaboration signal or when that signal is cleared during disconnect cleanup.
+Broadcast to currently connected sessions for a board when a participant publishes a non-durable collaboration signal, when the server publishes a non-durable collaboration notification, or when session-scoped signal state is cleared during disconnect cleanup. Delivery may be filtered by observer capability for capability-sensitive event types.
 
 Supported event types in the current foundation:
 - `cursor`
@@ -287,6 +287,10 @@ Supported event types in the current foundation:
 - `reaction`
 - `timer-control` (client-originated control signal, validated and converted server-side)
 - `timer-state` (server-originated state update / reconnect replay)
+- `voting-session-opened` (server-originated voting lifecycle notification)
+- `voting-votes-updated` (server-originated public-safe voting progress notification)
+- `voting-session-closed` (server-originated voting lifecycle notification)
+- `voting-results-revealed` (server-originated voting lifecycle notification)
 
 Example publish/broadcast payload:
 
@@ -313,9 +317,11 @@ Rules:
 - viewers may emit `cursor`, `viewport`, `presence-meta`, and `reaction`
 - only owners/editors may emit `follow` and `timer-control`
 - `timer-state` is server-managed and is never accepted from clients
+- voting lifecycle and progress notifications are server-managed and are never accepted from clients
 - reaction payloads require a bounded `reactionType` and are subject to dedicated anti-spam limits
 - timer control payloads require a valid `action`; `start` requires `durationMs`
 - payload must be a JSON object
+- observer-sensitive events are delivered only to connected sessions whose capability model allows observation of that event type
 
 ### `error`
 Sent to a session when the server detects a request or protocol problem.
@@ -411,9 +417,11 @@ Validation rules:
 - `timer-state` is not accepted from clients
 
 Behavior:
-- `reaction` is broadcast as an `ephemeral` event to the board
-- `timer-control` is converted by the server into a canonical `timer-state` broadcast
+- `reaction` is broadcast as an `ephemeral` event to connected observers allowed to receive reactions
+- `timer-control` is converted by the server into a canonical `timer-state` broadcast to connected observers allowed to receive timer state
 - reconnecting sessions may receive the latest active `timer-state` immediately after `joined`
+- voting session lifecycle updates may be broadcast as `voting-session-opened`, `voting-votes-updated`, `voting-session-closed`, and `voting-results-revealed`
+- voting-related ephemeral payloads are intentionally public-safe projections rather than full participant-specific results
 - old clients may safely ignore unknown Tier 2 `eventType` values
 
 ### Unknown message types

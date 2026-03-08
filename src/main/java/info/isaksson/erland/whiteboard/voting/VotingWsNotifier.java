@@ -19,19 +19,21 @@ public class VotingWsNotifier {
         this.outboundSupport = outboundSupport;
     }
 
-    public void sessionOpened(VotingSession session) {
+    public void sessionOpened(VotingSession session, VotingResults publicResults) {
+        ObjectNode payload = sessionPayload(session);
+        payload.set("results", resultsPayload(publicResults));
         outboundSupport.broadcastEphemeral(session.boardId(), new WsMessage.Ephemeral(
                 session.boardId(),
                 "server",
                 session.createdByUserId(),
                 "voting-session-opened",
-                sessionPayload(session),
+                payload,
                 false));
     }
 
-    public void sessionClosed(VotingSession session, VotingResults results) {
+    public void sessionClosed(VotingSession session, VotingResults publicResults) {
         ObjectNode payload = sessionPayload(session);
-        payload.set("results", resultsPayload(results));
+        payload.set("results", resultsPayload(publicResults));
         outboundSupport.broadcastEphemeral(session.boardId(), new WsMessage.Ephemeral(
                 session.boardId(),
                 "server",
@@ -41,9 +43,9 @@ public class VotingWsNotifier {
                 false));
     }
 
-    public void resultsRevealed(VotingSession session, VotingResults results) {
+    public void resultsRevealed(VotingSession session, VotingResults publicResults) {
         ObjectNode payload = sessionPayload(session);
-        payload.set("results", resultsPayload(results));
+        payload.set("results", resultsPayload(publicResults));
         outboundSupport.broadcastEphemeral(session.boardId(), new WsMessage.Ephemeral(
                 session.boardId(),
                 "server",
@@ -53,10 +55,10 @@ public class VotingWsNotifier {
                 false));
     }
 
-    public void votesUpdated(VotingSession session, VotingResults results, String actorUserId) {
+    public void votesUpdated(VotingSession session, VotingResults publicResults, String actorUserId) {
         ObjectNode payload = sessionPayload(session);
         payload.put("actorUserId", actorUserId);
-        payload.set("results", resultsPayload(results));
+        payload.set("results", resultsPayload(publicResults));
         outboundSupport.broadcastEphemeral(session.boardId(), new WsMessage.Ephemeral(
                 session.boardId(),
                 "server",

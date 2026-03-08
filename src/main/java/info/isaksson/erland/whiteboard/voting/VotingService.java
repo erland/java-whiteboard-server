@@ -11,6 +11,7 @@ import info.isaksson.erland.whiteboard.domain.Board;
 import info.isaksson.erland.whiteboard.persistence.BoardsRepository;
 import info.isaksson.erland.whiteboard.persistence.VoteRecordsRepository;
 import info.isaksson.erland.whiteboard.persistence.VotingSessionsRepository;
+import info.isaksson.erland.whiteboard.security.BoardAccessService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -182,16 +183,44 @@ public class VotingService {
     }
 
     public VotingResults getResults(String sessionId) {
+        return getPublicResults(sessionId);
+    }
+
+    public VotingResults getResults(String sessionId, BoardAccessService.Access access) {
         VotingSession session = requireSession(sessionId);
         List<VoteRecord> votes = voteRecordsRepository.listForSession(sessionId);
         Map<String, Integer> totalsByTarget = new LinkedHashMap<>();
         for (VoteRecord vote : votes) {
             totalsByTarget.merge(vote.targetRef(), vote.voteValue(), Integer::sum);
         }
-        boolean progressHidden = session.state() == VotingSessionState.OPEN && !session.rules().showProgressDuringVoting();
-        boolean identitiesHidden = session.rules().anonymousVotes();
+        boolean progressHidden = shouldHideProgress(session, access);
+        boolean identitiesHidden = shouldHideIdentities(session, access);
         List<VoteRecord> visibleVotes = identitiesHidden || progressHidden ? List.of() : votes;
         return new VotingResults(session, progressHidden ? Map.of() : totalsByTarget, visibleVotes, identitiesHidden, progressHidden);
+    }
+
+    public VotingResults getPublicResults(String sessionId) {
+        VotingSession session = requireSession(sessionId);
+        Board board = requireActiveBoard(session.boardId());
+        BoardAccessService.Access publicAudience = new BoardAccessService.Access(board, BoardAccessService.ROLE_VIEWER, false);
+        return getResults(sessionId, publicAudience);
+    }
+
+    private boolean shouldHideProgress(VotingSession session, BoardAccessService.Access access) {
+        if (session.state() != VotingSessionState.OPEN) {
+            return false;
+        }
+        if (session.rules().showProgressDuringVoting()) {
+            return false;
+        }
+        return access == null || !access.isFacilitator();
+    }
+
+    private boolean shouldHideIdentities(VotingSession session, BoardAccessService.Access access) {
+        if (!session.rules().anonymousVotes()) {
+            return false;
+        }
+        return access == null || !access.isFacilitator() || session.state() == VotingSessionState.OPEN;
     }
 
     private VotingSession requireSession(String sessionId) {
@@ -202,12 +231,12 @@ public class VotingService {
     private Board requireActiveBoard(String boardId) {
         return boardsRepository.findById(boardId)
                 .filter(board -> "active".equals(board.status()))
-                .orElseThrow(() -> new IllegalArgumentException("Board not found or not active"));
+                .orElseThrow(() -> new IllegalArgumentException("Board not found"));
     }
 
-    private static String normalizeText(String value, String field) {
+    private static String normalizeText(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(field + " is required");
+            throw new IllegalArgumentException(fieldName + " is required");
         }
         return value.trim();
     }

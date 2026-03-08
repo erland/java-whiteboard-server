@@ -50,14 +50,18 @@ public class BoardGuardsTest {
         assertDoesNotThrow(() -> boardGuards.requireBoardReadAccess(boardId, "bob"));
         assertDoesNotThrow(() -> boardGuards.requireBoardWriteAccess(boardId, "carol"));
         assertDoesNotThrow(() -> boardGuards.requireCommentParticipation(boardId, "bob", false));
+        assertDoesNotThrow(() -> boardGuards.requireVoteParticipationAccess(boardId, "bob", false));
+        assertDoesNotThrow(() -> boardGuards.requireVoteObservationAccess(boardId, "bob", false));
         assertDoesNotThrow(() -> boardGuards.requireAssetUseAccess(boardId, "bob", false));
         assertDoesNotThrow(() -> boardGuards.requireLibraryReadAccess(boardId, "bob", false));
         assertDoesNotThrow(() -> boardGuards.requireAssetManageAccess(boardId, "carol"));
+        assertDoesNotThrow(() -> boardGuards.requireFacilitationAccess(boardId, "alice"));
         assertDoesNotThrow(() -> boardGuards.requireLibraryShareAccess(boardId, "carol"));
         assertDoesNotThrow(() -> boardGuards.requireLibraryManageAccess(boardId, "alice"));
 
         assertThrows(NotFoundException.class, () -> boardGuards.requireBoardWriteAccess(boardId, "bob"));
         assertThrows(NotFoundException.class, () -> boardGuards.requireLibraryShareAccess(boardId, "bob"));
+        assertThrows(NotFoundException.class, () -> boardGuards.requireFacilitationAccess(boardId, "bob"));
         assertThrows(NotFoundException.class, () -> boardGuards.requireBoardReadAccess(boardId, "mallory"));
     }
 
@@ -69,5 +73,6 @@ public class BoardGuardsTest {
         assertDoesNotThrow(() -> boardGuards.requirePublicationReadAccess(boardId, null, true));
         assertThrows(NotFoundException.class, () -> boardGuards.requireBoardReadAccess(boardId, "mallory"));
         assertThrows(NotFoundException.class, () -> boardGuards.requireCommentParticipation(boardId, null, true));
+        assertThrows(NotFoundException.class, () -> boardGuards.requireVoteObservationAccess(boardId, null, true));
     }
 }

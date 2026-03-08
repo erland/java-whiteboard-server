@@ -41,15 +41,21 @@ public class BoardAccessServiceTest {
         assertTrue(owner.allows(BoardCapability.BOARD_OWNER));
         assertTrue(owner.allows(BoardCapability.BOARD_WRITE));
         assertTrue(owner.allows(BoardCapability.COMMENT_PARTICIPATE));
+        assertTrue(owner.allows(BoardCapability.FACILITATE_BOARD));
+        assertTrue(owner.canObserveVotes());
         assertTrue(owner.allows(BoardCapability.LIBRARY_MANAGE));
 
         assertTrue(viewer.allows(BoardCapability.BOARD_READ));
         assertFalse(viewer.allows(BoardCapability.BOARD_WRITE));
         assertTrue(viewer.allows(BoardCapability.COMMENT_PARTICIPATE));
+        assertTrue(viewer.isParticipant());
+        assertTrue(viewer.canObserveVotes());
         assertTrue(viewer.allows(BoardCapability.ASSET_USE));
         assertFalse(viewer.allows(BoardCapability.LIBRARY_SHARE));
 
         assertTrue(editor.allows(BoardCapability.BOARD_WRITE));
+        assertFalse(editor.isFacilitator());
+        assertTrue(editor.isParticipant());
         assertTrue(editor.allows(BoardCapability.ASSET_MANAGE));
         assertTrue(editor.allows(BoardCapability.LIBRARY_SHARE));
     }
@@ -64,6 +70,8 @@ public class BoardAccessServiceTest {
         assertTrue(publicationReader.allows(BoardCapability.LIBRARY_READ));
         assertFalse(publicationReader.allows(BoardCapability.BOARD_READ));
         assertFalse(publicationReader.allows(BoardCapability.COMMENT_PARTICIPATE));
+        assertFalse(publicationReader.allows(BoardCapability.VOTE_PARTICIPATE));
+        assertFalse(publicationReader.allows(BoardCapability.VOTE_OBSERVE));
         assertFalse(publicationReader.allows(BoardCapability.BOARD_WRITE));
     }
 

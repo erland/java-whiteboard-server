@@ -15,6 +15,7 @@ import info.isaksson.erland.whiteboard.domain.Board;
 import info.isaksson.erland.whiteboard.persistence.InMemoryBoardsRepository;
 import info.isaksson.erland.whiteboard.persistence.InMemoryVoteRecordsRepository;
 import info.isaksson.erland.whiteboard.persistence.InMemoryVotingSessionsRepository;
+import info.isaksson.erland.whiteboard.security.BoardAccessService;
 
 public class VotingServiceTest {
 
@@ -92,11 +93,16 @@ public class VotingServiceTest {
                         new VotingRules(true, false, 2, true, false, true, null)).id());
         votingService.castVote(session.id(), "bob", "viewer", false, "item-1", 1);
 
-        VotingResults results = votingService.getResults(session.id());
-        assertTrue(results.progressHidden());
-        assertTrue(results.identitiesHidden());
-        assertTrue(results.totalsByTarget().isEmpty());
-        assertTrue(results.visibleVotes().isEmpty());
+        VotingResults publicResults = votingService.getResults(session.id());
+        assertTrue(publicResults.progressHidden());
+        assertTrue(publicResults.identitiesHidden());
+        assertTrue(publicResults.totalsByTarget().isEmpty());
+        assertTrue(publicResults.visibleVotes().isEmpty());
+
+        VotingResults facilitatorResults = votingService.getResults(session.id(), new BoardAccessService.Access(boardsRepository.findById(boardId).orElseThrow(), BoardAccessService.ROLE_OWNER));
+        assertFalse(facilitatorResults.progressHidden());
+        assertTrue(facilitatorResults.identitiesHidden());
+        assertEquals(1, facilitatorResults.totalsByTarget().get("item-1"));
     }
 
     @Test

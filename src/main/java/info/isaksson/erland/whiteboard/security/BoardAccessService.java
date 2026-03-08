@@ -36,36 +36,43 @@ public class BoardAccessService {
         }
 
         public boolean isOwner() {
-            return ROLE_OWNER.equals(role);
+            return BoardCapabilityPolicy.isOwner(role);
+        }
+
+        public boolean isEditor() {
+            return BoardCapabilityPolicy.isEditor(role);
+        }
+
+        public boolean isViewer() {
+            return BoardCapabilityPolicy.isViewer(role);
         }
 
         public boolean isPublicationReader() {
-            return ROLE_PUBLICATION_READER.equals(role) || viaPublication;
+            return BoardCapabilityPolicy.isPublicationReader(role) || viaPublication;
         }
 
         public boolean canWrite() {
-            return isOwner() || ROLE_EDITOR.equals(role);
+            return allows(BoardCapability.BOARD_WRITE);
         }
 
         public boolean canRead() {
-            return isOwner() || ROLE_EDITOR.equals(role) || ROLE_VIEWER.equals(role) || isPublicationReader();
+            return allows(BoardCapability.BOARD_READ) || allows(BoardCapability.PUBLICATION_READ);
+        }
+
+        public boolean isFacilitator() {
+            return allows(BoardCapability.FACILITATE_BOARD);
+        }
+
+        public boolean isParticipant() {
+            return allows(BoardCapability.VOTE_PARTICIPATE);
+        }
+
+        public boolean canObserveVotes() {
+            return allows(BoardCapability.VOTE_OBSERVE);
         }
 
         public boolean allows(BoardCapability capability) {
-            if (capability == null) {
-                return false;
-            }
-            return switch (capability) {
-                case BOARD_READ -> canRead() && !isPublicationReader();
-                case BOARD_WRITE -> canWrite();
-                case BOARD_OWNER -> isOwner();
-                case PUBLICATION_READ -> canRead();
-                case COMMENT_PARTICIPATE -> isOwner() || ROLE_EDITOR.equals(role) || ROLE_VIEWER.equals(role);
-                case ASSET_USE -> canRead();
-                case ASSET_MANAGE -> canWrite();
-                case LIBRARY_READ -> canRead();
-                case LIBRARY_SHARE, LIBRARY_MANAGE -> canWrite();
-            };
+            return BoardCapabilityPolicy.allows(role, viaPublication, capability);
         }
     }
 

@@ -83,7 +83,7 @@ class BoardWebSocketEndpointTest {
     @Test
     void onOpen_whenBoardConnectionLimitReached_closesNewestSession() {
         EndpointFixture fixture = newFixture(
-                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "owner")),
                 new FixedSnapshotsRepository(null));
         fixture.limits.maxConnectionsPerBoard = 1;
 
@@ -104,7 +104,7 @@ class BoardWebSocketEndpointTest {
         EndpointFixture fixture = newFixture(
                 new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
                 new FixedSnapshotsRepository(null));
-        TestWsSupport.TestSessionState alice = openSession(fixture, "board-1", "alice", "editor");
+        TestWsSupport.TestSessionState alice = openSession(fixture, "board-1", "alice", "owner");
         TestWsSupport.TestSessionState bob = openSession(fixture, "board-1", "bob", "viewer");
 
         fixture.endpoint.onClose(alice.session, new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "bye"));

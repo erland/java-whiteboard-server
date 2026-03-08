@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import info.isaksson.erland.whiteboard.domain.BoardSnapshot;
 import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
+import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralAccessPolicy;
 
 @ApplicationScoped
 public class WsOutboundSupport {
@@ -27,18 +28,29 @@ public class WsOutboundSupport {
     private final PresenceHub presenceHub;
     private final WsSessionRegistry sessionRegistry;
     private final WsMetrics metrics;
+    private final EphemeralAccessPolicy ephemeralAccessPolicy;
+
+    WsOutboundSupport(ObjectMapper mapper,
+                      SnapshotsRepository snapshotsRepository,
+                      PresenceHub presenceHub,
+                      WsSessionRegistry sessionRegistry,
+                      WsMetrics metrics) {
+        this(mapper, snapshotsRepository, presenceHub, sessionRegistry, metrics, new EphemeralAccessPolicy());
+    }
 
     @Inject
     WsOutboundSupport(ObjectMapper mapper,
                       SnapshotsRepository snapshotsRepository,
                       PresenceHub presenceHub,
                       WsSessionRegistry sessionRegistry,
-                      WsMetrics metrics) {
+                      WsMetrics metrics,
+                      EphemeralAccessPolicy ephemeralAccessPolicy) {
         this.mapper = mapper;
         this.snapshotsRepository = snapshotsRepository;
         this.presenceHub = presenceHub;
         this.sessionRegistry = sessionRegistry;
         this.metrics = metrics;
+        this.ephemeralAccessPolicy = ephemeralAccessPolicy;
     }
 
     void sendJoined(Session session,
@@ -92,6 +104,10 @@ public class WsOutboundSupport {
             return;
         }
         for (Session session : sessions.values()) {
+            String permission = (String) session.getUserProperties().get(WsSessionProps.PERMISSION);
+            if (!ephemeralAccessPolicy.canObserve(permission, message.eventType())) {
+                continue;
+            }
             send(session, message);
             metrics.ephemeralBroadcast();
         }

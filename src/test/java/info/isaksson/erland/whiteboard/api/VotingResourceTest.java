@@ -16,6 +16,8 @@ import info.isaksson.erland.whiteboard.persistence.InMemoryBoardPermissionsRepos
 import info.isaksson.erland.whiteboard.persistence.InMemoryBoardsRepository;
 import info.isaksson.erland.whiteboard.persistence.InMemoryVoteRecordsRepository;
 import info.isaksson.erland.whiteboard.persistence.InMemoryVotingSessionsRepository;
+import info.isaksson.erland.whiteboard.persistence.InMemoryPublicationsRepository;
+import info.isaksson.erland.whiteboard.publication.PublicationService;
 import info.isaksson.erland.whiteboard.voting.VotingRules;
 import info.isaksson.erland.whiteboard.voting.VotingScopeType;
 import info.isaksson.erland.whiteboard.voting.VotingService;
@@ -32,6 +34,8 @@ public class VotingResourceTest {
     @Inject InMemoryBoardPermissionsRepository inMemoryBoardPermissionsRepository;
     @Inject InMemoryVotingSessionsRepository inMemoryVotingSessionsRepository;
     @Inject InMemoryVoteRecordsRepository inMemoryVoteRecordsRepository;
+    @Inject PublicationService publicationService;
+    @Inject InMemoryPublicationsRepository inMemoryPublicationsRepository;
 
     String boardId;
 
@@ -41,6 +45,7 @@ public class VotingResourceTest {
         if (inMemoryBoardPermissionsRepository != null) inMemoryBoardPermissionsRepository.clear();
         if (inMemoryVotingSessionsRepository != null) inMemoryVotingSessionsRepository.clear();
         if (inMemoryVoteRecordsRepository != null) inMemoryVoteRecordsRepository.clear();
+        if (inMemoryPublicationsRepository != null) inMemoryPublicationsRepository.clear();
         boardId = UUID.randomUUID().toString();
         boardsRepository.create(new Board(boardId, "Voting board", "whiteboard", "advanced", "alice", "active", Instant.now(), Instant.now()));
         if (inMemoryBoardPermissionsRepository != null) {
@@ -199,4 +204,84 @@ public class VotingResourceTest {
                 .then()
                 .statusCode(204);
     }
+    @Test
+    @TestSecurity(user = "alice", roles = { "whiteboard-user" })
+    void facilitator_can_view_hidden_progress_and_anonymous_votes_after_close() {
+        String sessionId = votingService.openSession(
+                votingService.createDraftSession(
+                        boardId,
+                        VotingScopeType.BOARD,
+                        boardId,
+                        "alice",
+                        new VotingRules(true, false, 2, true, false, true, null)).id())
+                .id();
+        votingService.castVote(sessionId, "bob", "viewer", false, "shape-1", 1);
+
+        given()
+                .when().get("/api/boards/" + boardId + "/voting-sessions/" + sessionId + "/results")
+                .then()
+                .statusCode(200)
+                .body("progressHidden", equalTo(false))
+                .body("totalsByTarget.shape-1", equalTo(1))
+                .body("identitiesHidden", equalTo(true))
+                .body("visibleVotes.size()", equalTo(0));
+
+        votingService.closeSession(sessionId);
+
+        given()
+                .when().get("/api/boards/" + boardId + "/voting-sessions/" + sessionId + "/results")
+                .then()
+                .statusCode(200)
+                .body("progressHidden", equalTo(false))
+                .body("identitiesHidden", equalTo(false))
+                .body("visibleVotes.size()", equalTo(1))
+                .body("visibleVotes[0].participantId", equalTo("bob"));
+    }
+
+
+
+    @Test
+    void anonymous_publication_reader_can_view_results_with_publication_token() {
+        String sessionId = votingService.openSession(
+                votingService.createDraftSession(
+                        boardId,
+                        VotingScopeType.BOARD,
+                        boardId,
+                        "alice",
+                        new VotingRules(true, true, 2, true, false, true, null)).id())
+                .id();
+        votingService.castVote(sessionId, "bob", "viewer", false, "shape-1", 1);
+        String token = publicationService.createBoardPublication(boardId, "alice", null, false).accessToken();
+
+        given()
+                .when().get("/api/boards/" + boardId + "/voting-sessions/" + sessionId + "/results?publicationToken=" + token)
+                .then()
+                .statusCode(200)
+                .body("progressHidden", equalTo(true))
+                .body("identitiesHidden", equalTo(true));
+    }
+
+    @Test
+    void anonymous_publication_reader_can_vote_when_session_rules_allow_publication_participation() {
+        String sessionId = votingService.openSession(
+                votingService.createDraftSession(
+                        boardId,
+                        VotingScopeType.BOARD,
+                        boardId,
+                        "alice",
+                        new VotingRules(true, true, 2, true, false, true, null)).id())
+                .id();
+        String token = publicationService.createBoardPublication(boardId, "alice", null, false).accessToken();
+
+        given()
+                .contentType("application/json")
+                .body("{" +
+                        "\"targetRef\":\"shape-1\"," +
+                        "\"voteValue\":1}")
+                .when().post("/api/boards/" + boardId + "/voting-sessions/" + sessionId + "/votes?publicationToken=" + token + "&participantToken=anon-1")
+                .then()
+                .statusCode(201)
+                .body("sessionId", equalTo(sessionId));
+    }
+
 }
