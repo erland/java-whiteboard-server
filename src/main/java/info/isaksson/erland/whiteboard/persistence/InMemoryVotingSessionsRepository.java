@@ -18,6 +18,10 @@ public class InMemoryVotingSessionsRepository implements VotingSessionsRepositor
 
     private final ConcurrentHashMap<String, VotingSession> sessions = new ConcurrentHashMap<>();
 
+    public void clear() {
+        sessions.clear();
+    }
+
     @Override
     public VotingSession create(VotingSession session) {
         Instant now = Instant.now();

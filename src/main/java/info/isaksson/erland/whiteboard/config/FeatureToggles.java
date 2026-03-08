@@ -22,10 +22,14 @@ public class FeatureToggles {
     @ConfigProperty(name = "whiteboard.features.ws.ephemeral.enabled", defaultValue = "true")
     public boolean wsEphemeralEnabled;
 
+    @ConfigProperty(name = "whiteboard.features.voting.enabled", defaultValue = "true")
+    public boolean votingEnabled;
+
     public boolean publicationsEnabled() { return publicationsEnabled; }
     public boolean commentsEnabled() { return commentsEnabled; }
     public boolean assetsEnabled() { return assetsEnabled; }
     public boolean wsEphemeralEnabled() { return wsEphemeralEnabled; }
+    public boolean votingEnabled() { return votingEnabled; }
 
     public List<String> enabledCapabilities() {
         List<String> out = new ArrayList<>();
@@ -33,6 +37,7 @@ public class FeatureToggles {
         if (commentsEnabled) out.add("comments");
         if (assetsEnabled) out.add("assets");
         if (wsEphemeralEnabled) out.add("ws-ephemeral");
+        if (votingEnabled) out.add("voting");
         return List.copyOf(out);
     }
 }

@@ -18,6 +18,10 @@ public class InMemoryVoteRecordsRepository implements VoteRecordsRepository {
 
     private final ConcurrentHashMap<String, VoteRecord> votes = new ConcurrentHashMap<>();
 
+    public void clear() {
+        votes.clear();
+    }
+
     @Override
     public VoteRecord create(VoteRecord voteRecord) {
         Instant now = Instant.now();

@@ -13,4 +13,5 @@ public class FeatureSupport {
     public void requirePublicationsEnabled() { if (!featureToggles.publicationsEnabled()) throw new NotFoundException(); }
     public void requireCommentsEnabled() { if (!featureToggles.commentsEnabled()) throw new NotFoundException(); }
     public void requireAssetsEnabled() { if (!featureToggles.assetsEnabled()) throw new NotFoundException(); }
+    public void requireVotingEnabled() { if (!featureToggles.votingEnabled()) throw new NotFoundException(); }
 }

@@ -13,6 +13,7 @@ class FeatureTogglesTest {
         toggles.commentsEnabled = false;
         toggles.assetsEnabled = true;
         toggles.wsEphemeralEnabled = false;
-        assertEquals(java.util.List.of("publications", "assets"), toggles.enabledCapabilities());
+        toggles.votingEnabled = true;
+        assertEquals(java.util.List.of("publications", "assets", "voting"), toggles.enabledCapabilities());
     }
 }
