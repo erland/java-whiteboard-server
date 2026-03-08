@@ -18,7 +18,7 @@ import info.isaksson.erland.whiteboard.domain.BoardSnapshot;
 import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
 
 @ApplicationScoped
-class WsOutboundSupport {
+public class WsOutboundSupport {
 
     private static final org.jboss.logging.Logger LOG = org.jboss.logging.Logger.getLogger(WsOutboundSupport.class);
 
@@ -80,7 +80,18 @@ class WsOutboundSupport {
         }
     }
 
-    void send(Session session, Object payload) {
+    public void broadcastEphemeral(String boardId, WsMessage.Ephemeral message) {
+        Map<String, Session> sessions = sessionRegistry.sessions(boardId);
+        if (sessions.isEmpty()) {
+            return;
+        }
+        for (Session session : sessions.values()) {
+            send(session, message);
+            metrics.ephemeralBroadcast();
+        }
+    }
+
+    public void send(Session session, Object payload) {
         try {
             String json = mapper.writeValueAsString(payload);
             session.getAsyncRemote().sendText(json, new SendHandler() {

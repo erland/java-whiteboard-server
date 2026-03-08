@@ -24,6 +24,7 @@ public class WsMetrics {
     private final Counter connectionsClosed;
     private final Counter opsReceived;
     private final Counter opsBroadcast;
+    private final Counter ephemeralBroadcast;
     private final Counter presenceBroadcast;
     private final Counter joinsAccepted;
     private final Counter jsonErrors;
@@ -39,23 +40,21 @@ public class WsMetrics {
         this.connectionsClosed = registry.counter("whiteboard_ws_connections_closed_total");
         this.opsReceived = registry.counter("whiteboard_ws_ops_in_total");
         this.opsBroadcast = registry.counter("whiteboard_ws_ops_out_total");
+        this.ephemeralBroadcast = registry.counter("whiteboard_ws_ephemeral_out_total");
         this.presenceBroadcast = registry.counter("whiteboard_ws_presence_out_total");
         this.joinsAccepted = registry.counter("whiteboard_ws_joins_accepted_total");
         this.jsonErrors = registry.counter("whiteboard_ws_json_errors_total");
         this.errors = registry.counter("whiteboard_ws_errors_total");
     }
 
-    /** Backwards compatible: global counter only. */
     public void connectionOpened() {
         connectionsOpened.increment();
     }
 
-    /** Backwards compatible: global counter only. */
     public void connectionClosed() {
         connectionsClosed.increment();
     }
 
-    /** Preferred: count open connections and update per-board gauge. */
     public void connectionOpened(String boardId) {
         connectionOpened();
         if (boardId == null) {
@@ -72,7 +71,6 @@ public class WsMetrics {
         ai.incrementAndGet();
     }
 
-    /** Preferred: count closed connections and update per-board gauge. */
     public void connectionClosed(String boardId) {
         connectionClosed();
         if (boardId == null) {
@@ -94,6 +92,10 @@ public class WsMetrics {
 
     public void opBroadcast() {
         opsBroadcast.increment();
+    }
+
+    public void ephemeralBroadcast() {
+        ephemeralBroadcast.increment();
     }
 
     public void presenceBroadcast() {

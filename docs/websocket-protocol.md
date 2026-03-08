@@ -153,6 +153,7 @@ Current server message families:
 - `joined`
 - `presence`
 - `op`
+- `ephemeral`
 - `error`
 
 ## Server-to-client messages
@@ -267,6 +268,42 @@ Sequencing rules:
 - the server assigns sequence numbers per board
 - sequence numbers are monotonic within a board
 - clients should treat `seq` as the canonical ordering value for received operations
+
+
+### `ephemeral`
+Broadcast to all currently connected sessions for a board when a participant publishes a non-durable collaboration signal or when that signal is cleared during disconnect cleanup.
+
+Supported event types in the current foundation:
+- `cursor`
+- `viewport`
+- `follow`
+- `presence-meta`
+
+Example publish/broadcast payload:
+
+```json
+{
+  "type": "ephemeral",
+  "boardId": "board-1",
+  "connectionId": "conn-1",
+  "from": "alice",
+  "eventType": "cursor",
+  "payload": {
+    "x": 120,
+    "y": 340
+  },
+  "cleared": false
+}
+```
+
+Disconnect cleanup uses the same message family with `cleared: true` so consumers can drop session-scoped signal state without touching durable board state.
+
+Rules:
+- ephemeral events are never sequenced as board operations
+- ephemeral events are never written to snapshots
+- viewers may emit `cursor`, `viewport`, and `presence-meta`
+- only owners/editors may emit `follow`
+- payload must be a JSON object
 
 ### `error`
 Sent to a session when the server detects a request or protocol problem.

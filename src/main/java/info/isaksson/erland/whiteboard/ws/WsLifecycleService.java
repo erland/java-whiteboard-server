@@ -7,6 +7,9 @@ import jakarta.inject.Inject;
 import jakarta.websocket.CloseReason;
 import jakarta.websocket.Session;
 
+import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralSignal;
+import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralStateRegistry;
+
 @ApplicationScoped
 class WsLifecycleService {
 
@@ -16,6 +19,7 @@ class WsLifecycleService {
     private final WsAuthResolver authResolver;
     private final WsSessionRegistry sessionRegistry;
     private final PresenceHub presenceHub;
+    private final EphemeralStateRegistry ephemeralStateRegistry;
     private final WsLimits limits;
     private final WsMetrics metrics;
     private final WsOutboundSupport outboundSupport;
@@ -25,6 +29,7 @@ class WsLifecycleService {
                        WsAuthResolver authResolver,
                        WsSessionRegistry sessionRegistry,
                        PresenceHub presenceHub,
+                       EphemeralStateRegistry ephemeralStateRegistry,
                        WsLimits limits,
                        WsMetrics metrics,
                        WsOutboundSupport outboundSupport) {
@@ -32,6 +37,7 @@ class WsLifecycleService {
         this.authResolver = authResolver;
         this.sessionRegistry = sessionRegistry;
         this.presenceHub = presenceHub;
+        this.ephemeralStateRegistry = ephemeralStateRegistry;
         this.limits = limits;
         this.metrics = metrics;
         this.outboundSupport = outboundSupport;
@@ -92,6 +98,15 @@ class WsLifecycleService {
             return;
         }
 
+        for (EphemeralSignal cleared : ephemeralStateRegistry.clearConnection(boardId, connectionId)) {
+            outboundSupport.broadcastEphemeral(boardId, new WsMessage.Ephemeral(
+                    cleared.boardId(),
+                    cleared.connectionId(),
+                    cleared.fromUserId(),
+                    cleared.eventType().wireName(),
+                    cleared.payload(),
+                    true));
+        }
         presenceHub.leave(boardId, connectionId);
         sessionRegistry.unregister(boardId, connectionId);
         outboundSupport.broadcastPresence(boardId);
@@ -143,6 +158,8 @@ class WsLifecycleService {
         session.getUserProperties().put(WsSessionProps.PERMISSION, decision.permission());
         session.getUserProperties().put(WsSessionProps.RATE_LIMITER,
                 new TokenBucketRateLimiter(limits.burst(), limits.ratePerSecond()));
+        session.getUserProperties().put(WsSessionProps.EPHEMERAL_RATE_LIMITER,
+                new TokenBucketRateLimiter(limits.ephemeralBurst(), limits.ephemeralRatePerSecond()));
         return new WsConnectionContext(
                 context.boardId(),
                 context.connectionId(),

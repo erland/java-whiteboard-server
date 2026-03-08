@@ -15,6 +15,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import info.isaksson.erland.whiteboard.domain.BoardSnapshot;
 import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
+import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralStateRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.websocket.CloseReason;
 
@@ -34,6 +35,7 @@ class WsLifecycleServiceTest {
                 new WsAuthResolver(null),
                 sessionRegistry,
                 presenceHub,
+                new EphemeralStateRegistry(),
                 limits(),
                 metrics,
                 new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
@@ -64,6 +66,7 @@ class WsLifecycleServiceTest {
                 new WsAuthResolver(null),
                 sessionRegistry,
                 presenceHub,
+                new EphemeralStateRegistry(),
                 limits(),
                 metrics,
                 outboundSupport);
@@ -72,6 +75,7 @@ class WsLifecycleServiceTest {
                 new WsAuthResolver(null),
                 sessionRegistry,
                 presenceHub,
+                new EphemeralStateRegistry(),
                 limits(),
                 metrics,
                 outboundSupport);
@@ -95,6 +99,8 @@ class WsLifecycleServiceTest {
         limits.maxMessageBytes = 64 * 1024;
         limits.ratePerSecond = 20;
         limits.burst = 40;
+        limits.ephemeralRatePerSecond = 60;
+        limits.ephemeralBurst = 120;
         limits.maxConnectionsPerBoard = 64;
         return limits;
     }

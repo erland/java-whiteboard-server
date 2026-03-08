@@ -10,6 +10,8 @@ import jakarta.websocket.Session;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralInboundMessageHandler;
+
 @ApplicationScoped
 class WsInboundMessageHandler {
 
@@ -18,18 +20,21 @@ class WsInboundMessageHandler {
     private final WsLimits limits;
     private final WsMetrics metrics;
     private final WsOutboundSupport outboundSupport;
+    private final EphemeralInboundMessageHandler ephemeralInboundMessageHandler;
 
     @Inject
     WsInboundMessageHandler(ObjectMapper mapper,
                             BoardOpSequencer opSequencer,
                             WsLimits limits,
                             WsMetrics metrics,
-                            WsOutboundSupport outboundSupport) {
+                            WsOutboundSupport outboundSupport,
+                            EphemeralInboundMessageHandler ephemeralInboundMessageHandler) {
         this.mapper = mapper;
         this.opSequencer = opSequencer;
         this.limits = limits;
         this.metrics = metrics;
         this.outboundSupport = outboundSupport;
+        this.ephemeralInboundMessageHandler = ephemeralInboundMessageHandler;
     }
 
     void handle(String message, Session session) {
@@ -37,13 +42,6 @@ class WsInboundMessageHandler {
             metrics.incRejected("message_too_large");
             outboundSupport.send(session, new WsMessage.Error("MESSAGE_TOO_LARGE", "Message exceeds max size."));
             outboundSupport.close(session, CloseReason.CloseCodes.TOO_BIG, "Message too large");
-            return;
-        }
-
-        Object rlObj = session.getUserProperties().get(WsSessionProps.RATE_LIMITER);
-        if (rlObj instanceof TokenBucketRateLimiter rl && !rl.tryConsume()) {
-            metrics.incRejected("rate_limited");
-            outboundSupport.send(session, new WsMessage.Error("RATE_LIMITED", "Too many messages."));
             return;
         }
 
@@ -67,6 +65,18 @@ class WsInboundMessageHandler {
         }
 
         String type = root.hasNonNull("type") ? root.get("type").asText() : "";
+        if ("ephemeral".equals(type)) {
+            if (!consumeRateLimit(session, WsSessionProps.EPHEMERAL_RATE_LIMITER, "ephemeral_rate_limited")) {
+                return;
+            }
+            ephemeralInboundMessageHandler.handle(root, session, boardId, fromUserId, permission, connectionId);
+            return;
+        }
+
+        if (!consumeRateLimit(session, WsSessionProps.RATE_LIMITER, "rate_limited")) {
+            return;
+        }
+
         if (!"op".equals(type)) {
             return;
         }
@@ -86,5 +96,15 @@ class WsInboundMessageHandler {
 
         long seq = opSequencer.next(boardId);
         outboundSupport.broadcastOp(boardId, new WsMessage.Op(boardId, seq, fromUserId, op));
+    }
+
+    private boolean consumeRateLimit(Session session, String key, String rejectedReason) {
+        Object rlObj = session.getUserProperties().get(key);
+        if (rlObj instanceof TokenBucketRateLimiter rl && !rl.tryConsume()) {
+            metrics.incRejected(rejectedReason);
+            outboundSupport.send(session, new WsMessage.Error("RATE_LIMITED", "Too many messages."));
+            return false;
+        }
+        return true;
     }
 }

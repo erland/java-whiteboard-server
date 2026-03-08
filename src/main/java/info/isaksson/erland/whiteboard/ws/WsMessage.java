@@ -2,7 +2,7 @@ package info.isaksson.erland.whiteboard.ws;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
-public sealed interface WsMessage permits WsMessage.Joined, WsMessage.Presence, WsMessage.Op, WsMessage.Error {
+public sealed interface WsMessage permits WsMessage.Joined, WsMessage.Presence, WsMessage.Op, WsMessage.Ephemeral, WsMessage.Error {
 
     /**
      * Sent to the joining client after successful authorization.
@@ -45,6 +45,12 @@ public sealed interface WsMessage permits WsMessage.Joined, WsMessage.Presence, 
     record Op(String type, String boardId, long seq, String from, JsonNode op) implements WsMessage {
         public Op(String boardId, long seq, String from, JsonNode op) {
             this("op", boardId, seq, from, op);
+        }
+    }
+
+    record Ephemeral(String type, String boardId, String connectionId, String from, String eventType, JsonNode payload, boolean cleared) implements WsMessage {
+        public Ephemeral(String boardId, String connectionId, String from, String eventType, JsonNode payload, boolean cleared) {
+            this("ephemeral", boardId, connectionId, from, eventType, payload, cleared);
         }
     }
 

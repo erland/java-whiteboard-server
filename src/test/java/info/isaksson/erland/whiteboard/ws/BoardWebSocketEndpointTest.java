@@ -15,6 +15,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import info.isaksson.erland.whiteboard.domain.BoardSnapshot;
 import info.isaksson.erland.whiteboard.persistence.SnapshotsRepository;
+import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralAccessPolicy;
+import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralInboundMessageHandler;
+import info.isaksson.erland.whiteboard.ws.ephemeral.EphemeralStateRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.websocket.CloseReason;
 
@@ -189,6 +192,90 @@ class BoardWebSocketEndpointTest {
     }
 
     @Test
+    void onMessage_viewerPublishesCursorEphemeralBroadcastToAllSessions() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "viewer")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState sender = openSession(fixture, "board-1", "alice", "viewer");
+        TestWsSupport.TestSessionState receiver = openSession(fixture, "board-1", "bob", "viewer");
+
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"cursor\",\"payload\":{\"x\":10,\"y\":20}}", sender.session);
+
+        JsonNode senderEvent = mapper.readTree(sender.sentTexts.get(sender.sentTexts.size() - 1));
+        JsonNode receiverEvent = mapper.readTree(receiver.sentTexts.get(receiver.sentTexts.size() - 1));
+
+        assertEquals("ephemeral", senderEvent.get("type").asText());
+        assertEquals("board-1", senderEvent.get("boardId").asText());
+        assertEquals("alice", senderEvent.get("from").asText());
+        assertEquals("cursor", senderEvent.get("eventType").asText());
+        assertFalse(senderEvent.get("cleared").asBoolean());
+        assertEquals(10, senderEvent.path("payload").path("x").asInt());
+        assertEquals(senderEvent, receiverEvent);
+    }
+
+    @Test
+    void onMessage_viewerCannotPublishFollowEphemeral() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "viewer")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState state = openSession(fixture, "board-1", "alice", "viewer");
+
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"follow\",\"payload\":{\"targetUserId\":\"bob\"}}", state.session);
+
+        JsonNode error = mapper.readTree(state.sentTexts.get(state.sentTexts.size() - 1));
+        assertEquals("error", error.get("type").asText());
+        assertEquals("FORBIDDEN", error.get("code").asText());
+    }
+
+    @Test
+    void onMessage_invalidEphemeralPayload_returnsValidationError() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState state = openSession(fixture, "board-1", "alice", "editor");
+
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"cursor\",\"payload\":123}", state.session);
+
+        JsonNode error = mapper.readTree(state.sentTexts.get(state.sentTexts.size() - 1));
+        assertEquals("error", error.get("type").asText());
+        assertEquals("VALIDATION_ERROR", error.get("code").asText());
+    }
+
+    @Test
+    void onClose_clearsEphemeralStateBeforePresenceBroadcast() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState alice = openSession(fixture, "board-1", "alice", "editor");
+        TestWsSupport.TestSessionState bob = openSession(fixture, "board-1", "bob", "viewer");
+
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"cursor\",\"payload\":{\"x\":1}}", alice.session);
+        fixture.endpoint.onClose(alice.session, new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "bye"));
+
+        JsonNode cleared = mapper.readTree(bob.sentTexts.get(bob.sentTexts.size() - 2));
+        JsonNode presence = mapper.readTree(bob.sentTexts.get(bob.sentTexts.size() - 1));
+        assertEquals("ephemeral", cleared.get("type").asText());
+        assertTrue(cleared.get("cleared").asBoolean());
+        assertEquals("cursor", cleared.get("eventType").asText());
+        assertEquals("presence", presence.get("type").asText());
+    }
+
+    @Test
+    void onMessage_ephemeralDoesNotAdvanceOperationSequence() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState state = openSession(fixture, "board-1", "alice", "editor");
+
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"cursor\",\"payload\":{\"x\":1}}", state.session);
+        fixture.endpoint.onMessage("{\"type\":\"op\",\"op\":{\"kind\":\"add\",\"id\":\"s1\"}}", state.session);
+
+        JsonNode op = mapper.readTree(state.sentTexts.get(state.sentTexts.size() - 1));
+        assertEquals("op", op.get("type").asText());
+        assertEquals(1L, op.get("seq").asLong());
+    }
+
+    @Test
     void onMessage_tooLargeMessage_returnsErrorAndCloses() throws Exception {
         EndpointFixture fixture = newFixture(
                 new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
@@ -210,6 +297,7 @@ class BoardWebSocketEndpointTest {
                 new WsAuthResolver(null),
                 fixture.sessionRegistry,
                 fixture.presenceHub,
+                fixture.ephemeralStateRegistry,
                 fixture.limits,
                 fixture.metrics,
                 fixture.outboundSupport);
@@ -227,13 +315,17 @@ class BoardWebSocketEndpointTest {
         limits.ratePerSecond = 20;
         limits.burst = 40;
         limits.maxConnectionsPerBoard = 64;
+        limits.ephemeralRatePerSecond = 60;
+        limits.ephemeralBurst = 120;
         WsMetrics metrics = new WsMetrics(new SimpleMeterRegistry());
         WsOutboundSupport outboundSupport = new WsOutboundSupport(mapper, snapshotsRepository, presenceHub, sessionRegistry, metrics);
+        EphemeralStateRegistry ephemeralStateRegistry = new EphemeralStateRegistry();
         endpoint.lifecycleService = new WsLifecycleService(
                 authorizer,
                 new WsAuthResolver(null),
                 sessionRegistry,
                 presenceHub,
+                ephemeralStateRegistry,
                 limits,
                 metrics,
                 outboundSupport);
@@ -242,14 +334,16 @@ class BoardWebSocketEndpointTest {
                 new BoardOpSequencer(),
                 limits,
                 metrics,
-                outboundSupport);
-        return new EndpointFixture(endpoint, presenceHub, sessionRegistry, limits, metrics, outboundSupport);
+                outboundSupport,
+                new EphemeralInboundMessageHandler(new EphemeralAccessPolicy(), ephemeralStateRegistry, outboundSupport));
+        return new EndpointFixture(endpoint, presenceHub, sessionRegistry, ephemeralStateRegistry, limits, metrics, outboundSupport);
     }
 
     private record EndpointFixture(
             BoardWebSocketEndpoint endpoint,
             PresenceHub presenceHub,
             WsSessionRegistry sessionRegistry,
+            EphemeralStateRegistry ephemeralStateRegistry,
             WsLimits limits,
             WsMetrics metrics,
             WsOutboundSupport outboundSupport) {
