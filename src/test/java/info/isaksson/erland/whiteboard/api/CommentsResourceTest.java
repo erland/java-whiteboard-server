@@ -165,6 +165,40 @@ public class CommentsResourceTest {
                 .body("code", equalTo("NOT_FOUND"));
     }
 
+
+    @Test
+    void anonymous_publication_reader_cannot_list_comments_for_other_board() {
+        commentService.createBoardComment(boardId, "alice", "Public note");
+        String token = publicationService.createBoardPublication(boardId, "alice", null, true).accessToken();
+        String otherBoardId = UUID.randomUUID().toString();
+        boardsRepository.create(new Board(otherBoardId, "Other board", "whiteboard", "advanced", "alice", "active", Instant.now(), Instant.now()));
+
+        given()
+                .when().get("/api/boards/" + otherBoardId + "/comments?publicationToken=" + token)
+                .then()
+                .statusCode(404)
+                .body("code", equalTo("NOT_FOUND"));
+    }
+
+    @Test
+    @TestSecurity(user = "bob", roles = { "whiteboard-user" })
+    void comment_author_cannot_update_comment_on_other_board_path() {
+        Comment comment = commentService.createBoardComment(boardId, "bob", "Needs review");
+        String otherBoardId = UUID.randomUUID().toString();
+        boardsRepository.create(new Board(otherBoardId, "Other board", "whiteboard", "advanced", "alice", "active", Instant.now(), Instant.now()));
+        if (inMemoryBoardPermissionsRepository != null) {
+            inMemoryBoardPermissionsRepository.upsert(otherBoardId, "bob", "viewer");
+        }
+
+        given()
+                .contentType("application/json")
+                .body("{\"content\":\"Edited top level\"}")
+                .when().patch("/api/boards/" + otherBoardId + "/comments/" + comment.id())
+                .then()
+                .statusCode(404)
+                .body("code", equalTo("NOT_FOUND"));
+    }
+
     @Test
     @TestSecurity(user = "bob", roles = { "whiteboard-user" })
     void reply_requires_parent_comment_id() {

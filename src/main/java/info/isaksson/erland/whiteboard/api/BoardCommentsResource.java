@@ -1,6 +1,5 @@
 package info.isaksson.erland.whiteboard.api;
 
-import info.isaksson.erland.whiteboard.api.FeatureSupport;
 import java.util.List;
 
 import info.isaksson.erland.whiteboard.api.dto.CommentResponse;
@@ -8,18 +7,10 @@ import info.isaksson.erland.whiteboard.api.dto.CreateCommentRequest;
 import info.isaksson.erland.whiteboard.api.dto.UpdateCommentRequest;
 import info.isaksson.erland.whiteboard.api.errors.ApiError;
 import info.isaksson.erland.whiteboard.comments.Comment;
-import info.isaksson.erland.whiteboard.comments.CommentService;
-import info.isaksson.erland.whiteboard.comments.CommentTargetType;
-import info.isaksson.erland.whiteboard.publication.Publication;
-import info.isaksson.erland.whiteboard.publication.PublicationPolicy;
-import info.isaksson.erland.whiteboard.security.Authz;
-import info.isaksson.erland.whiteboard.security.BoardGuards;
-import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -46,16 +37,10 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 public class BoardCommentsResource {
 
     @Inject
-    CommentService commentService;
+    CommentApplicationService commentApplicationService;
 
     @Inject
-    BoardGuards boardGuards;
-
-    @Inject
-    PublicationPolicy publicationPolicy;
-
-    @Inject
-    SecurityIdentity identity;
+    CommentRequestSupport commentRequestSupport;
 
     @Inject
     FeatureSupport featureSupport;
@@ -71,14 +56,7 @@ public class BoardCommentsResource {
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @Parameter(description = "Optional publication token used for anonymous publication comment visibility when enabled.", required = false, schema = @Schema(type = SchemaType.STRING)) @QueryParam("publicationToken") String publicationToken) {
         featureSupport.requireCommentsEnabled();
-        Publication publication = resolveReadablePublication(boardId, publicationToken);
-        if (!identity.isAnonymous()) {
-            String userId = Authz.userId(identity);
-            boardGuards.requirePublicationReadAccess(boardId, userId, publication != null);
-        } else if (publication == null) {
-            throw new NotFoundException();
-        }
-        return commentService.listForBoard(boardId).stream()
+        return commentApplicationService.listComments(boardId, publicationToken).stream()
                 .map(CommentResponse::from)
                 .toList();
     }
@@ -98,27 +76,11 @@ public class BoardCommentsResource {
             @RequestBody(required = true, description = "Comment creation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CreateCommentRequest.class)))
             CreateCommentRequest req) {
         featureSupport.requireCommentsEnabled();
-        Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        boardGuards.requireCommentParticipation(boardId, userId, false);
-
-        CommentTargetType targetType;
         try {
-            targetType = parseTargetType(req == null ? null : req.targetType());
-        } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
-        }
-
-        try {
-            Comment created = switch (targetType) {
-                case BOARD -> commentService.createBoardComment(boardId, userId, requireContent(req));
-                case OBJECT -> commentService.createObjectComment(boardId, requireTargetRef(req, "object"), userId, requireContent(req));
-                case REGION -> commentService.createRegionComment(boardId, requireTargetRef(req, "region"), userId, requireContent(req));
-                case COMMENT -> commentService.replyToComment(boardId, requireParentCommentId(req), userId, requireContent(req));
-            };
+            Comment created = commentApplicationService.createComment(boardId, req);
             return Response.status(Response.Status.CREATED).entity(CommentResponse.from(created)).build();
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return commentRequestSupport.validationError(e.getMessage());
         }
     }
 
@@ -138,21 +100,10 @@ public class BoardCommentsResource {
             @RequestBody(required = true, description = "Comment update request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = UpdateCommentRequest.class)))
             UpdateCommentRequest req) {
         featureSupport.requireCommentsEnabled();
-        Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        boardGuards.requireCommentParticipation(boardId, userId, false);
-        Comment existing = requireCommentForBoard(boardId, commentId);
-        if (!userId.equals(existing.authorUserId())) {
-            throw new NotFoundException();
-        }
         try {
-            return commentService.updateContent(commentId, userId, req == null ? null : req.content())
-                    .map(CommentResponse::from)
-                    .map(Response::ok)
-                    .orElseThrow(NotFoundException::new)
-                    .build();
+            return Response.ok(CommentResponse.from(commentApplicationService.updateComment(boardId, commentId, req))).build();
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return commentRequestSupport.validationError(e.getMessage());
         }
     }
 
@@ -170,17 +121,10 @@ public class BoardCommentsResource {
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @Parameter(description = "Comment identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("commentId") String commentId) {
         featureSupport.requireCommentsEnabled();
-        Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        ensureCanManageLifecycle(boardId, commentId, userId);
         try {
-            return commentService.resolve(commentId)
-                    .map(CommentResponse::from)
-                    .map(Response::ok)
-                    .orElseThrow(NotFoundException::new)
-                    .build();
+            return Response.ok(CommentResponse.from(commentApplicationService.resolveComment(boardId, commentId))).build();
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return commentRequestSupport.validationError(e.getMessage());
         }
     }
 
@@ -198,17 +142,10 @@ public class BoardCommentsResource {
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @Parameter(description = "Comment identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("commentId") String commentId) {
         featureSupport.requireCommentsEnabled();
-        Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        ensureCanManageLifecycle(boardId, commentId, userId);
         try {
-            return commentService.reopen(commentId)
-                    .map(CommentResponse::from)
-                    .map(Response::ok)
-                    .orElseThrow(NotFoundException::new)
-                    .build();
+            return Response.ok(CommentResponse.from(commentApplicationService.reopenComment(boardId, commentId))).build();
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return commentRequestSupport.validationError(e.getMessage());
         }
     }
 
@@ -225,86 +162,10 @@ public class BoardCommentsResource {
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @Parameter(description = "Comment identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("commentId") String commentId) {
         featureSupport.requireCommentsEnabled();
-        Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        ensureCanManageLifecycle(boardId, commentId, userId);
         try {
-            return commentService.delete(commentId)
-                    .map(CommentResponse::from)
-                    .map(Response::ok)
-                    .orElseThrow(NotFoundException::new)
-                    .build();
+            return Response.ok(CommentResponse.from(commentApplicationService.deleteComment(boardId, commentId))).build();
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return commentRequestSupport.validationError(e.getMessage());
         }
-    }
-
-    private Publication resolveReadablePublication(String boardId, String publicationToken) {
-        var decision = publicationPolicy.validateToken(publicationToken);
-        if (!decision.valid() || decision.publication() == null) {
-            return null;
-        }
-        Publication publication = decision.publication();
-        if (!boardId.equals(publication.boardId()) || !publication.allowComments()) {
-            return null;
-        }
-        return publication;
-    }
-
-    private Comment requireCommentForBoard(String boardId, String commentId) {
-        Comment comment = commentService.findById(commentId).orElseThrow(NotFoundException::new);
-        if (!boardId.equals(comment.boardId())) {
-            throw new NotFoundException();
-        }
-        return comment;
-    }
-
-    private void ensureCanManageLifecycle(String boardId, String commentId, String userId) {
-        boardGuards.requireCommentParticipation(boardId, userId, false);
-        Comment existing = requireCommentForBoard(boardId, commentId);
-        if (!userId.equals(existing.authorUserId())) {
-            boardGuards.requireBoardWriteAccess(boardId, userId);
-        }
-    }
-
-    private static CommentTargetType parseTargetType(String value) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("Field 'targetType' is required.");
-        }
-        try {
-            return CommentTargetType.fromStorageValue(value.trim().toLowerCase());
-        } catch (IllegalArgumentException e) {
-            throw new IllegalArgumentException("Field 'targetType' must be one of: board, object, region, comment.");
-        }
-    }
-
-    private static String requireContent(CreateCommentRequest req) {
-        String value = req == null ? null : req.content();
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("Field 'content' is required.");
-        }
-        return value;
-    }
-
-    private static String requireTargetRef(CreateCommentRequest req, String type) {
-        String value = req == null ? null : req.targetRef();
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("Field 'targetRef' is required for " + type + " comments.");
-        }
-        return value;
-    }
-
-    private static String requireParentCommentId(CreateCommentRequest req) {
-        String value = req == null ? null : req.parentCommentId();
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("Field 'parentCommentId' is required for reply comments.");
-        }
-        return value;
-    }
-
-    private static Response validationError(String message) {
-        return Response.status(Response.Status.BAD_REQUEST)
-                .entity(new ApiError("VALIDATION_ERROR", message))
-                .build();
     }
 }
