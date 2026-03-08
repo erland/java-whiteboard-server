@@ -33,6 +33,14 @@ final class JdbcSupport {
         ps.setInt(index, value);
     }
 
+    static void setNullableLong(PreparedStatement ps, int index, Long value) throws SQLException {
+        if (value == null) {
+            ps.setNull(index, Types.BIGINT);
+            return;
+        }
+        ps.setLong(index, value);
+    }
+
     static void setNullableString(PreparedStatement ps, int index, String value) throws SQLException {
         if (value == null) {
             ps.setNull(index, Types.VARCHAR);
