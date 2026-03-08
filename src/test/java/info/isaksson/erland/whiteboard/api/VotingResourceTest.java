@@ -3,6 +3,7 @@ package info.isaksson.erland.whiteboard.api;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.startsWith;
 
 import java.time.Instant;
 import java.util.UUID;
@@ -238,6 +239,108 @@ public class VotingResourceTest {
                 .body("visibleVotes[0].participantId", equalTo("bob"));
     }
 
+
+
+    @Test
+    @TestSecurity(user = "alice", roles = { "whiteboard-user" })
+    void invalid_transition_returns_validation_error() {
+        String sessionId = votingService.createDraftSession(boardId, VotingScopeType.BOARD, boardId, "alice", VotingRules.defaults()).id();
+
+        given()
+                .when().post("/api/boards/" + boardId + "/voting-sessions/" + sessionId + "/reveal")
+                .then()
+                .statusCode(400)
+                .body("code", equalTo("VALIDATION_ERROR"));
+    }
+
+    @Test
+    void anonymous_publication_reader_requires_participant_token_to_vote() {
+        String sessionId = votingService.openSession(
+                votingService.createDraftSession(
+                        boardId,
+                        VotingScopeType.BOARD,
+                        boardId,
+                        "alice",
+                        new VotingRules(true, true, 2, true, false, true, null)).id())
+                .id();
+        String token = publicationService.createBoardPublication(boardId, "alice", null, false).accessToken();
+
+        given()
+                .contentType("application/json")
+                .body("{" +
+                        "\"targetRef\":\"shape-1\"," +
+                        "\"voteValue\":1}")
+                .when().post("/api/boards/" + boardId + "/voting-sessions/" + sessionId + "/votes?publicationToken=" + token)
+                .then()
+                .statusCode(400)
+                .body("code", equalTo("VALIDATION_ERROR"))
+                .body("message", equalTo("Field 'participantToken' is required for anonymous publication voting."));
+    }
+
+    @Test
+    void anonymous_publication_reader_with_invalid_token_cannot_access_results_or_vote() {
+        String sessionId = votingService.openSession(
+                votingService.createDraftSession(
+                        boardId,
+                        VotingScopeType.BOARD,
+                        boardId,
+                        "alice",
+                        new VotingRules(true, true, 2, true, false, true, null)).id())
+                .id();
+
+        given()
+                .when().get("/api/boards/" + boardId + "/voting-sessions/" + sessionId + "/results?publicationToken=invalid-token")
+                .then()
+                .statusCode(404)
+                .body("code", equalTo("NOT_FOUND"));
+
+        given()
+                .contentType("application/json")
+                .body("{" +
+                        "\"targetRef\":\"shape-1\"," +
+                        "\"voteValue\":1}")
+                .when().post("/api/boards/" + boardId + "/voting-sessions/" + sessionId + "/votes?publicationToken=invalid-token&participantToken=anon-1")
+                .then()
+                .statusCode(404)
+                .body("code", equalTo("NOT_FOUND"));
+    }
+
+    @Test
+    void anonymous_publication_reader_participant_id_is_stable_for_same_token_pair() {
+        String sessionId = votingService.openSession(
+                votingService.createDraftSession(
+                        boardId,
+                        VotingScopeType.BOARD,
+                        boardId,
+                        "alice",
+                        new VotingRules(true, true, 2, true, false, true, null)).id())
+                .id();
+        String token = publicationService.createBoardPublication(boardId, "alice", null, false).accessToken();
+
+        String participantId1 = given()
+                .contentType("application/json")
+                .body("{" +
+                        "\"targetRef\":\"shape-1\"," +
+                        "\"voteValue\":1}")
+                .when().post("/api/boards/" + boardId + "/voting-sessions/" + sessionId + "/votes?publicationToken=" + token + "&participantToken=anon-1")
+                .then()
+                .statusCode(201)
+                .body("participantId", startsWith("publication-participant:"))
+                .extract().path("participantId");
+
+        String participantId2 = given()
+                .contentType("application/json")
+                .body("{" +
+                        "\"targetRef\":\"shape-1\"," +
+                        "\"voteValue\":2}")
+                .when().post("/api/boards/" + boardId + "/voting-sessions/" + sessionId + "/votes?publicationToken=" + token + "&participantToken=anon-1")
+                .then()
+                .statusCode(201)
+                .body("participantId", startsWith("publication-participant:"))
+                .extract().path("participantId");
+
+        org.junit.jupiter.api.Assertions.assertEquals(participantId1, participantId2);
+    }
 
 
     @Test

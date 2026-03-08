@@ -60,6 +60,82 @@ class WsLifecycleServiceTest {
         assertEquals("INCOMPATIBLE_PROTOCOL", error.get("code").asText());
     }
 
+    @Test
+    void open_setsAcceptedSessionPropertiesAndRegistersDedicatedRateLimiters() {
+        WsSessionRegistry sessionRegistry = new WsSessionRegistry();
+        PresenceHub presenceHub = new PresenceHub();
+        FixedSnapshotsRepository snapshots = new FixedSnapshotsRepository(null);
+        WsMetrics metrics = new WsMetrics(new SimpleMeterRegistry());
+        WsLifecycleService service = new WsLifecycleService(new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")), new WsAuthResolver(null), sessionRegistry, presenceHub, new EphemeralStateRegistry(), new TimerEphemeralStateRegistry(mapper), contractSupport(), limits(), metrics, new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
+
+        TestWsSupport.TestSessionState state = TestWsSupport.newSession(URI.create("ws://localhost/ws/boards/board-1"), Map.of(), null);
+        state.session.getUserProperties().put(WsSessionProps.CONNECTION_ID, "conn-1");
+        state.session.getUserProperties().put(WsSessionProps.WS_SESSION_ID, "ws-1");
+
+        service.open(state.session, "board-1");
+
+        assertEquals("board-1", state.session.getUserProperties().get(WsSessionProps.BOARD_ID));
+        assertEquals("alice", state.session.getUserProperties().get(WsSessionProps.USER_ID));
+        assertEquals("editor", state.session.getUserProperties().get(WsSessionProps.PERMISSION));
+        assertNotNull(state.session.getUserProperties().get(WsSessionProps.RATE_LIMITER));
+        assertNotNull(state.session.getUserProperties().get(WsSessionProps.EPHEMERAL_RATE_LIMITER));
+        assertNotNull(state.session.getUserProperties().get(WsSessionProps.REACTION_RATE_LIMITER));
+        assertEquals(1, sessionRegistry.connectionCount("board-1"));
+    }
+
+    @Test
+    void open_rejectedJoinDoesNotRegisterPresenceOrSession() {
+        WsSessionRegistry sessionRegistry = new WsSessionRegistry();
+        PresenceHub presenceHub = new PresenceHub();
+        FixedSnapshotsRepository snapshots = new FixedSnapshotsRepository(null);
+        WsMetrics metrics = new WsMetrics(new SimpleMeterRegistry());
+        WsLifecycleService service = new WsLifecycleService(new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(false, "Denied", null, null)), new WsAuthResolver(null), sessionRegistry, presenceHub, new EphemeralStateRegistry(), new TimerEphemeralStateRegistry(mapper), contractSupport(), limits(), metrics, new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
+
+        TestWsSupport.TestSessionState state = TestWsSupport.newSession(URI.create("ws://localhost/ws/boards/board-1"), Map.of(), null);
+        service.open(state.session, "board-1");
+
+        assertNotNull(state.closeReason);
+        assertEquals(CloseReason.CloseCodes.VIOLATED_POLICY, state.closeReason.getCloseCode());
+        assertEquals(0, sessionRegistry.connectionCount("board-1"));
+        assertTrue(state.sentTexts.isEmpty());
+    }
+
+    @Test
+    void open_whenTimerStateExists_replaysCurrentTimerStateAfterJoinedMessage() throws Exception {
+        WsSessionRegistry sessionRegistry = new WsSessionRegistry();
+        PresenceHub presenceHub = new PresenceHub();
+        FixedSnapshotsRepository snapshots = new FixedSnapshotsRepository(null);
+        WsMetrics metrics = new WsMetrics(new SimpleMeterRegistry());
+        TimerEphemeralStateRegistry timerStateRegistry = new TimerEphemeralStateRegistry(mapper);
+        timerStateRegistry.applyControl("board-1", "conn-seed", "alice", mapper.readTree("{\"action\":\"start\",\"durationMs\":30000,\"timerId\":\"retro\"}"));
+        WsLifecycleService service = new WsLifecycleService(new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "bob", "viewer")), new WsAuthResolver(null), sessionRegistry, presenceHub, new EphemeralStateRegistry(), timerStateRegistry, contractSupport(), limits(), metrics, new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
+
+        TestWsSupport.TestSessionState state = TestWsSupport.newSession(URI.create("ws://localhost/ws/boards/board-1"), Map.of(), null);
+        service.open(state.session, "board-1");
+
+        JsonNode joined = mapper.readTree(state.sentTexts.get(0));
+        JsonNode timerReplay = mapper.readTree(state.sentTexts.get(1));
+        assertEquals("joined", joined.get("type").asText());
+        assertEquals("ephemeral", timerReplay.get("type").asText());
+        assertEquals("timer-state", timerReplay.get("eventType").asText());
+        assertEquals("retro", timerReplay.path("payload").path("timerId").asText());
+    }
+
+    @Test
+    void close_withoutBoardContext_isNoOp() {
+        WsSessionRegistry sessionRegistry = new WsSessionRegistry();
+        PresenceHub presenceHub = new PresenceHub();
+        FixedSnapshotsRepository snapshots = new FixedSnapshotsRepository(null);
+        WsMetrics metrics = new WsMetrics(new SimpleMeterRegistry());
+        WsLifecycleService service = new WsLifecycleService(new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")), new WsAuthResolver(null), sessionRegistry, presenceHub, new EphemeralStateRegistry(), new TimerEphemeralStateRegistry(mapper), contractSupport(), limits(), metrics, new WsOutboundSupport(mapper, snapshots, presenceHub, sessionRegistry, metrics));
+
+        TestWsSupport.TestSessionState state = TestWsSupport.newSession(URI.create("ws://localhost/ws/boards/board-1"), Map.of(), null);
+        assertDoesNotThrow(() -> service.close(state.session, new CloseReason(CloseReason.CloseCodes.NORMAL_CLOSURE, "bye")));
+        assertEquals(0, sessionRegistry.connectionCount("board-1"));
+        assertTrue(state.sentTexts.isEmpty());
+    }
+
+
     private WsContractSupport contractSupport() {
         ProtocolCompatibility compatibility = new ProtocolCompatibility();
         compatibility.apiVersion = 1;

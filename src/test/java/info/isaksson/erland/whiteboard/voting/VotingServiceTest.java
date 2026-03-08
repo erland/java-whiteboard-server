@@ -115,6 +115,41 @@ public class VotingServiceTest {
                 votingService.castVote(session.id(), "anon-session", "publication_reader", true, "item-1", 1));
     }
 
+
+    @Test
+    void updating_vote_cannot_exceed_remaining_budget_across_other_targets() {
+        VotingRules rules = new VotingRules(true, false, 3, false, true, true, null);
+        VotingSession session = votingService.openSession(
+                votingService.createDraftSession(boardId, VotingScopeType.BOARD, boardId, "alice", rules).id());
+
+        votingService.castVote(session.id(), "bob", "viewer", false, "item-1", 1);
+        votingService.castVote(session.id(), "bob", "viewer", false, "item-2", 2);
+
+        assertThrows(IllegalArgumentException.class, () ->
+                votingService.castVote(session.id(), "bob", "viewer", false, "item-1", 2));
+    }
+
+    @Test
+    void remove_vote_is_rejected_when_updates_are_disabled() {
+        VotingRules rules = new VotingRules(true, false, 1, false, false, false, null);
+        VotingSession session = votingService.openSession(
+                votingService.createDraftSession(boardId, VotingScopeType.BOARD, boardId, "alice", rules).id());
+        votingService.castVote(session.id(), "bob", "viewer", false, "item-1", 1);
+
+        assertThrows(IllegalArgumentException.class, () ->
+                votingService.removeVote(session.id(), "bob", "item-1", false));
+    }
+
+    @Test
+    void rejects_votes_once_session_is_closed() {
+        VotingSession session = votingService.openSession(
+                votingService.createDraftSession(boardId, VotingScopeType.BOARD, boardId, "alice", VotingRules.defaults()).id());
+        votingService.closeSession(session.id());
+
+        assertThrows(IllegalArgumentException.class, () ->
+                votingService.castVote(session.id(), "bob", "viewer", false, "item-1", 1));
+    }
+
     @Test
     void can_cancel_from_open_but_not_reveal_after_cancel() {
         VotingSession session = votingService.openSession(
