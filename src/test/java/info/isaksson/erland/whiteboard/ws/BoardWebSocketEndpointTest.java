@@ -401,6 +401,22 @@ class BoardWebSocketEndpointTest {
         assertEquals("FORBIDDEN", error.get("code").asText());
     }
 
+
+    @Test
+    void onMessage_startingSecondTimerReturnsValidationError() throws Exception {
+        EndpointFixture fixture = newFixture(
+                new StaticBoardJoinAuthorizer(new BoardJoinAuthorizer.JoinDecision(true, "OK", "alice", "editor")),
+                new FixedSnapshotsRepository(null));
+        TestWsSupport.TestSessionState alice = openSession(fixture, "board-1", "alice", "editor");
+
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"timer-control\",\"payload\":{\"action\":\"start\",\"durationMs\":30000,\"timerId\":\"retro-timer\"}}", alice.session);
+        fixture.endpoint.onMessage("{\"type\":\"ephemeral\",\"eventType\":\"timer-control\",\"payload\":{\"action\":\"start\",\"durationMs\":15000,\"timerId\":\"retro-timer-2\"}}", alice.session);
+
+        JsonNode error = mapper.readTree(alice.sentTexts.get(alice.sentTexts.size() - 1));
+        assertEquals("VALIDATION_ERROR", error.get("code").asText());
+        assertTrue(error.get("message").asText().contains("already active"));
+    }
+
     @Test
     void onOpen_whenTimerStateExists_replaysCurrentTimerStateToNewSession() throws Exception {
         EndpointFixture fixture = newFixture(

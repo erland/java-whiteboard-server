@@ -28,8 +28,24 @@ public class TimerControlPayloadValidator {
             return "Field 'timerId' must be a non-empty string up to 64 characters when provided.";
         }
         JsonNode scope = payload.get("scope");
-        if (scope != null && !scope.isNull() && !scope.isObject()) {
-            return "Field 'scope' must be an object when provided.";
+        if (scope != null && !scope.isNull()) {
+            if (!scope.isObject()) {
+                return "Field 'scope' must be an object when provided.";
+            }
+            JsonNode type = scope.get("type");
+            if (type != null && !type.isNull()) {
+                if (!type.isTextual() || type.asText().isBlank()) {
+                    return "Field 'scope.type' must be a non-empty string when provided.";
+                }
+                String normalizedType = type.asText().trim().toLowerCase();
+                if (!Set.of("board", "page", "section").contains(normalizedType)) {
+                    return "Field 'scope.type' must be one of: board, page, section.";
+                }
+                JsonNode ref = scope.get("ref");
+                if (!"board".equals(normalizedType) && (ref == null || ref.isNull() || !ref.isTextual() || ref.asText().isBlank())) {
+                    return "Field 'scope.ref' is required for page and section timers.";
+                }
+            }
         }
         JsonNode label = payload.get("label");
         if (label != null && !label.isNull() && (!label.isTextual() || label.asText().length() > 80)) {

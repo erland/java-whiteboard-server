@@ -104,9 +104,11 @@ public class EphemeralInboundMessageHandler {
             outboundSupport.send(session, new WsMessage.Error("VALIDATION_ERROR", validationError));
             return;
         }
-        JsonNode statePayload = timerStateRegistry.applyControl(boardId, connectionId, fromUserId, payload);
-        if (statePayload == null) {
-            outboundSupport.send(session, new WsMessage.Error("VALIDATION_ERROR", "Timer action is not valid in the current timer state."));
+        JsonNode statePayload;
+        try {
+            statePayload = timerStateRegistry.applyControl(boardId, connectionId, fromUserId, payload);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            outboundSupport.send(session, new WsMessage.Error("VALIDATION_ERROR", e.getMessage()));
             return;
         }
         outboundSupport.broadcastEphemeral(boardId, new WsMessage.Ephemeral(
