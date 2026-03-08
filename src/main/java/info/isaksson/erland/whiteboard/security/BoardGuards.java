@@ -65,6 +65,46 @@ public class BoardGuards {
         return requireCapability(boardId, userId, BoardCapability.ASSET_MANAGE, false);
     }
 
+    public BoardAccessService.Access requireFacilitationAccess(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.FACILITATE, false);
+    }
+
+    public BoardAccessService.Access requireVoteParticipation(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.VOTE_PARTICIPATE, false);
+    }
+
+    public BoardAccessService.Access requireVoteObservation(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.VOTE_OBSERVE, publicationReadable);
+    }
+
+    public BoardAccessService.Access requireTimerControl(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.TIMER_CONTROL, false);
+    }
+
+    public BoardAccessService.Access requireTimerObservation(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.TIMER_OBSERVE, publicationReadable);
+    }
+
+    public BoardAccessService.Access requireReactionEmit(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.REACTION_EMIT, false);
+    }
+
+    public BoardAccessService.Access requireReactionObservation(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.REACTION_OBSERVE, publicationReadable);
+    }
+
+    public BoardAccessService.Access requirePrivateModeContribution(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.PRIVATE_MODE_CONTRIBUTE, false);
+    }
+
+    public BoardAccessService.Access requirePrivateModeReveal(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.PRIVATE_MODE_REVEAL, false);
+    }
+
+    public BoardAccessService.Access requirePrivateModeView(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.PRIVATE_MODE_VIEW, false);
+    }
+
     public BoardAccessService.Access requireLibraryReadAccess(String boardId, String userId, boolean publicationReadable) {
         return requireCapability(boardId, userId, BoardCapability.LIBRARY_READ, publicationReadable);
     }

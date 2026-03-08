@@ -75,4 +75,43 @@ public class BoardAccessServiceTest {
         assertFalse(viewer.isPublicationReader());
         assertTrue(viewer.allows(BoardCapability.BOARD_READ));
     }
+    @Test
+    void tier2_capabilities_distinguish_facilitator_participant_and_published_reader_defaults() {
+        var owner = boardAccessService.findCapabilityAccess(boardId, "alice").orElseThrow();
+        var viewer = boardAccessService.findCapabilityAccess(boardId, "bob").orElseThrow();
+        var editor = boardAccessService.findCapabilityAccess(boardId, "carol").orElseThrow();
+        var publicationReader = boardAccessService.findCapabilityAccess(boardId, null, true).orElseThrow();
+
+        assertTrue(owner.isFacilitator());
+        assertTrue(owner.isParticipant());
+        assertTrue(owner.allows(BoardCapability.FACILITATE));
+        assertTrue(owner.allows(BoardCapability.TIMER_CONTROL));
+        assertTrue(owner.allows(BoardCapability.PRIVATE_MODE_REVEAL));
+        assertTrue(owner.allows(BoardCapability.PRIVATE_MODE_VIEW));
+
+        assertFalse(viewer.isFacilitator());
+        assertTrue(viewer.isParticipant());
+        assertTrue(viewer.allows(BoardCapability.VOTE_PARTICIPATE));
+        assertTrue(viewer.allows(BoardCapability.VOTE_OBSERVE));
+        assertTrue(viewer.allows(BoardCapability.TIMER_OBSERVE));
+        assertTrue(viewer.allows(BoardCapability.REACTION_EMIT));
+        assertTrue(viewer.allows(BoardCapability.REACTION_OBSERVE));
+        assertTrue(viewer.allows(BoardCapability.PRIVATE_MODE_CONTRIBUTE));
+        assertFalse(viewer.allows(BoardCapability.TIMER_CONTROL));
+        assertFalse(viewer.allows(BoardCapability.PRIVATE_MODE_REVEAL));
+        assertFalse(viewer.allows(BoardCapability.PRIVATE_MODE_VIEW));
+
+        assertTrue(editor.isParticipant());
+        assertTrue(editor.allows(BoardCapability.VOTE_PARTICIPATE));
+        assertFalse(editor.allows(BoardCapability.FACILITATE));
+        assertFalse(editor.allows(BoardCapability.PRIVATE_MODE_VIEW));
+
+        assertTrue(publicationReader.isPublicationReader());
+        assertFalse(publicationReader.isParticipant());
+        assertFalse(publicationReader.allows(BoardCapability.VOTE_OBSERVE));
+        assertFalse(publicationReader.allows(BoardCapability.TIMER_OBSERVE));
+        assertFalse(publicationReader.allows(BoardCapability.REACTION_OBSERVE));
+        assertFalse(publicationReader.allows(BoardCapability.PRIVATE_MODE_VIEW));
+    }
+
 }
