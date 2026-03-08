@@ -46,11 +46,28 @@ public class BoardGuardsTest {
         permissionsRepository.upsert(boardId, "bob", BoardAccessService.ROLE_VIEWER);
         permissionsRepository.upsert(boardId, "carol", BoardAccessService.ROLE_EDITOR);
 
-        assertDoesNotThrow(() -> boardGuards.requireReadableAccess(boardId, "alice"));
-        assertDoesNotThrow(() -> boardGuards.requireReadableAccess(boardId, "bob"));
-        assertDoesNotThrow(() -> boardGuards.requireWritableAccess(boardId, "carol"));
+        assertDoesNotThrow(() -> boardGuards.requireBoardReadAccess(boardId, "alice"));
+        assertDoesNotThrow(() -> boardGuards.requireBoardReadAccess(boardId, "bob"));
+        assertDoesNotThrow(() -> boardGuards.requireBoardWriteAccess(boardId, "carol"));
+        assertDoesNotThrow(() -> boardGuards.requireCommentParticipation(boardId, "bob", false));
+        assertDoesNotThrow(() -> boardGuards.requireAssetUseAccess(boardId, "bob", false));
+        assertDoesNotThrow(() -> boardGuards.requireLibraryReadAccess(boardId, "bob", false));
+        assertDoesNotThrow(() -> boardGuards.requireAssetManageAccess(boardId, "carol"));
+        assertDoesNotThrow(() -> boardGuards.requireLibraryShareAccess(boardId, "carol"));
+        assertDoesNotThrow(() -> boardGuards.requireLibraryManageAccess(boardId, "alice"));
 
-        assertThrows(NotFoundException.class, () -> boardGuards.requireWritableAccess(boardId, "bob"));
-        assertThrows(NotFoundException.class, () -> boardGuards.requireReadableAccess(boardId, "mallory"));
+        assertThrows(NotFoundException.class, () -> boardGuards.requireBoardWriteAccess(boardId, "bob"));
+        assertThrows(NotFoundException.class, () -> boardGuards.requireLibraryShareAccess(boardId, "bob"));
+        assertThrows(NotFoundException.class, () -> boardGuards.requireBoardReadAccess(boardId, "mallory"));
+    }
+
+    @Test
+    void publication_read_access_is_separate_from_board_membership() {
+        String boardId = UUID.randomUUID().toString();
+        boardsRepository.create(new Board(boardId, "Published", "whiteboard", "advanced", "alice", "active", null, null));
+
+        assertDoesNotThrow(() -> boardGuards.requirePublicationReadAccess(boardId, null, true));
+        assertThrows(NotFoundException.class, () -> boardGuards.requireBoardReadAccess(boardId, "mallory"));
+        assertThrows(NotFoundException.class, () -> boardGuards.requireCommentParticipation(boardId, null, true));
     }
 }

@@ -26,23 +26,63 @@ public class BoardGuards {
     }
 
     public Board requireOwner(String boardId, String userId) {
-        Board board = findExistingNotDeleted(boardId).orElseThrow(NotFoundException::new);
-        if (!board.ownerUserId().equals(userId)) {
-            throw new NotFoundException();
-        }
-        return board;
+        return requireBoardOwnerAccess(boardId, userId).board();
     }
 
     public BoardAccessService.Access requireReadableAccess(String boardId, String userId) {
-        return boardAccess.findAccess(boardId, userId)
-                .filter(BoardAccessService.Access::canRead)
-                .filter(access -> !isDeleted(access.board()))
-                .orElseThrow(NotFoundException::new);
+        return requireBoardReadAccess(boardId, userId);
     }
 
     public BoardAccessService.Access requireWritableAccess(String boardId, String userId) {
-        return boardAccess.findAccess(boardId, userId)
-                .filter(BoardAccessService.Access::canWrite)
+        return requireBoardWriteAccess(boardId, userId);
+    }
+
+    public BoardAccessService.Access requireBoardOwnerAccess(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.BOARD_OWNER, false);
+    }
+
+    public BoardAccessService.Access requireBoardReadAccess(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.BOARD_READ, false);
+    }
+
+    public BoardAccessService.Access requireBoardWriteAccess(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.BOARD_WRITE, false);
+    }
+
+    public BoardAccessService.Access requirePublicationReadAccess(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.PUBLICATION_READ, publicationReadable);
+    }
+
+    public BoardAccessService.Access requireCommentParticipation(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.COMMENT_PARTICIPATE, publicationReadable);
+    }
+
+    public BoardAccessService.Access requireAssetUseAccess(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.ASSET_USE, publicationReadable);
+    }
+
+    public BoardAccessService.Access requireAssetManageAccess(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.ASSET_MANAGE, false);
+    }
+
+    public BoardAccessService.Access requireLibraryReadAccess(String boardId, String userId, boolean publicationReadable) {
+        return requireCapability(boardId, userId, BoardCapability.LIBRARY_READ, publicationReadable);
+    }
+
+    public BoardAccessService.Access requireLibraryShareAccess(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.LIBRARY_SHARE, false);
+    }
+
+    public BoardAccessService.Access requireLibraryManageAccess(String boardId, String userId) {
+        return requireCapability(boardId, userId, BoardCapability.LIBRARY_MANAGE, false);
+    }
+
+    private BoardAccessService.Access requireCapability(String boardId,
+                                                        String userId,
+                                                        BoardCapability capability,
+                                                        boolean publicationReadable) {
+        return boardAccess.findCapabilityAccess(boardId, userId, publicationReadable)
+                .filter(access -> access.allows(capability))
                 .filter(access -> !isDeleted(access.board()))
                 .orElseThrow(NotFoundException::new);
     }
