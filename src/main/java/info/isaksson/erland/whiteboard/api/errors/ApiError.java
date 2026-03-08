@@ -15,6 +15,8 @@ public record ApiError(
                 "PUBLICATION_REVOKED",
                 "PUBLICATION_EXPIRED",
                 "PUBLICATION_INACTIVE",
+                "COMMENT_NOT_FOUND",
+                "COMMENT_STATE_INVALID",
                 "PAYLOAD_TOO_LARGE"
         })
         String code,

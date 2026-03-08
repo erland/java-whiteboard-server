@@ -22,6 +22,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
                 @Tag(name = "Snapshots", description = "Board snapshot create, read, and version listing endpoints."),
                 @Tag(name = "Invites", description = "Board invite creation, validation, acceptance, and revocation endpoints."),
                 @Tag(name = "Publications", description = "Board publication management and publication resolution endpoints."),
+                @Tag(name = "Comments", description = "Durable board comment endpoints."),
                 @Tag(name = "Identity", description = "Authenticated user identity endpoints.")
         }
 )
