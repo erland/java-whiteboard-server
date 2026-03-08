@@ -133,8 +133,9 @@ public class BoardCommentsResource {
             @APIResponse(responseCode = "404", description = "Comment not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
     })
     public Response updateComment(
-            @PathParam("boardId") String boardId,
-            @PathParam("commentId") String commentId,
+            @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+            @Parameter(description = "Comment identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("commentId") String commentId,
+            @RequestBody(required = true, description = "Comment update request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = UpdateCommentRequest.class)))
             UpdateCommentRequest req) {
         featureSupport.requireCommentsEnabled();
         Authz.requireUserOrAdmin(identity);
@@ -160,7 +161,14 @@ public class BoardCommentsResource {
     @Consumes(MediaType.WILDCARD)
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Resolve comment", description = "Resolves a comment. The comment author or a board writer may resolve the comment.")
-    public Response resolveComment(@PathParam("boardId") String boardId, @PathParam("commentId") String commentId) {
+    @APIResponses({
+            @APIResponse(responseCode = "200", description = "Comment resolved.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CommentResponse.class))),
+            @APIResponse(responseCode = "401", description = "Authentication required.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class))),
+            @APIResponse(responseCode = "404", description = "Comment not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
+    })
+    public Response resolveComment(
+            @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+            @Parameter(description = "Comment identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("commentId") String commentId) {
         featureSupport.requireCommentsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
@@ -181,7 +189,14 @@ public class BoardCommentsResource {
     @Consumes(MediaType.WILDCARD)
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Reopen comment", description = "Reopens a resolved comment. The comment author or a board writer may reopen the comment.")
-    public Response reopenComment(@PathParam("boardId") String boardId, @PathParam("commentId") String commentId) {
+    @APIResponses({
+            @APIResponse(responseCode = "200", description = "Comment reopened.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CommentResponse.class))),
+            @APIResponse(responseCode = "401", description = "Authentication required.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class))),
+            @APIResponse(responseCode = "404", description = "Comment not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
+    })
+    public Response reopenComment(
+            @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+            @Parameter(description = "Comment identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("commentId") String commentId) {
         featureSupport.requireCommentsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
@@ -201,7 +216,14 @@ public class BoardCommentsResource {
     @Path("/{boardId}/comments/{commentId}")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Delete comment", description = "Marks a comment as deleted. The comment author or a board writer may delete the comment.")
-    public Response deleteComment(@PathParam("boardId") String boardId, @PathParam("commentId") String commentId) {
+    @APIResponses({
+            @APIResponse(responseCode = "200", description = "Comment deleted.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CommentResponse.class))),
+            @APIResponse(responseCode = "401", description = "Authentication required.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class))),
+            @APIResponse(responseCode = "404", description = "Comment not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
+    })
+    public Response deleteComment(
+            @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+            @Parameter(description = "Comment identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("commentId") String commentId) {
         featureSupport.requireCommentsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);

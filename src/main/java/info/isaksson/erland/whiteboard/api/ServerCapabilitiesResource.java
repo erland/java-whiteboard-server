@@ -9,7 +9,11 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
+import org.eclipse.microprofile.openapi.annotations.media.Content;
+import org.eclipse.microprofile.openapi.annotations.media.Schema;
 import org.eclipse.microprofile.openapi.annotations.Operation;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponses;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 
 @Tag(name = "Identity")
@@ -22,6 +26,9 @@ public class ServerCapabilitiesResource {
 
     @GET
     @Operation(summary = "Get server capabilities", description = "Returns the current API version, WebSocket protocol version, and enabled feature capabilities so clients can adapt contracts safely.")
+    @APIResponses({
+            @APIResponse(responseCode = "200", description = "Capabilities returned.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CapabilitiesResponse.class)))
+    })
     public CapabilitiesResponse get() {
         return new CapabilitiesResponse(Integer.toString(protocolCompatibility.apiVersion()), Integer.toString(protocolCompatibility.wsProtocolVersion()), featureToggles.enabledCapabilities());
     }

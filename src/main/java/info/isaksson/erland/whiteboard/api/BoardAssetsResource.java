@@ -92,9 +92,11 @@ public class BoardAssetsResource {
             @APIResponse(responseCode = "401", description = "Authentication required.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class))),
             @APIResponse(responseCode = "404", description = "Board not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
     })
-    public Response createAsset(@PathParam("boardId") String boardId,
+    public Response createAsset(
+                                @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
                                 @RequestBody(required = true, description = "Asset metadata creation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CreateAssetRequest.class)))
                                 CreateAssetRequest req) {
+        featureSupport.requireAssetsEnabled();
         featureSupport.requireAssetsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
@@ -120,8 +122,16 @@ public class BoardAssetsResource {
     @Path("/{boardId}/assets/{assetId}/activate")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Mark asset active", description = "Marks an existing asset active after its associated upload or validation workflow has completed.")
-    public Response activateAsset(@PathParam("boardId") String boardId,
-                                  @PathParam("assetId") String assetId,
+    @APIResponses({
+            @APIResponse(responseCode = "200", description = "Asset marked active.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = AssetResponse.class))),
+            @APIResponse(responseCode = "400", description = "Invalid asset activation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class))),
+            @APIResponse(responseCode = "401", description = "Authentication required.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class))),
+            @APIResponse(responseCode = "404", description = "Asset not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
+    })
+    public Response activateAsset(
+                                  @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+                                  @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId,
+                                  @RequestBody(required = true, description = "Asset activation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ActivateAssetRequest.class)))
                                   ActivateAssetRequest req) {
         featureSupport.requireAssetsEnabled();
         Authz.requireUserOrAdmin(identity);
@@ -143,9 +153,18 @@ public class BoardAssetsResource {
     @Path("/{boardId}/assets/{assetId}/fail")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Mark asset failed", description = "Marks an existing asset as failed and stores a required failure reason.")
-    public Response markFailed(@PathParam("boardId") String boardId,
-                               @PathParam("assetId") String assetId,
+    @APIResponses({
+            @APIResponse(responseCode = "200", description = "Asset marked failed.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = AssetResponse.class))),
+            @APIResponse(responseCode = "400", description = "Invalid asset failure request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class))),
+            @APIResponse(responseCode = "401", description = "Authentication required.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class))),
+            @APIResponse(responseCode = "404", description = "Asset not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
+    })
+    public Response markFailed(
+                               @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+                               @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId,
+                               @RequestBody(required = true, description = "Asset failure request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = AssetFailureRequest.class)))
                                AssetFailureRequest req) {
+        featureSupport.requireAssetsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         boardGuards.requireAssetManageAccess(boardId, userId);
@@ -165,9 +184,18 @@ public class BoardAssetsResource {
     @Path("/{boardId}/assets/{assetId}/quarantine")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Quarantine asset", description = "Marks an existing asset quarantined and stores a required quarantine reason.")
-    public Response quarantine(@PathParam("boardId") String boardId,
-                               @PathParam("assetId") String assetId,
+    @APIResponses({
+            @APIResponse(responseCode = "200", description = "Asset quarantined.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = AssetResponse.class))),
+            @APIResponse(responseCode = "400", description = "Invalid asset quarantine request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class))),
+            @APIResponse(responseCode = "401", description = "Authentication required.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class))),
+            @APIResponse(responseCode = "404", description = "Asset not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
+    })
+    public Response quarantine(
+                               @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+                               @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId,
+                               @RequestBody(required = true, description = "Asset quarantine request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = AssetFailureRequest.class)))
                                AssetFailureRequest req) {
+        featureSupport.requireAssetsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
         boardGuards.requireAssetManageAccess(boardId, userId);
@@ -187,8 +215,14 @@ public class BoardAssetsResource {
     @Path("/{boardId}/assets/{assetId}")
     @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Delete asset metadata", description = "Marks an existing board asset deleted. Binary cleanup remains the responsibility of the surrounding storage workflow.")
-    public Response deleteAsset(@PathParam("boardId") String boardId,
-                                @PathParam("assetId") String assetId) {
+    @APIResponses({
+            @APIResponse(responseCode = "200", description = "Asset metadata deleted.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = AssetResponse.class))),
+            @APIResponse(responseCode = "401", description = "Authentication required.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class))),
+            @APIResponse(responseCode = "404", description = "Asset not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
+    })
+    public Response deleteAsset(
+                                @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+                                @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId) {
         featureSupport.requireAssetsEnabled();
         Authz.requireUserOrAdmin(identity);
         String userId = Authz.userId(identity);
