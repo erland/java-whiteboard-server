@@ -387,4 +387,26 @@ public class VotingResourceTest {
                 .body("sessionId", equalTo(sessionId));
     }
 
+    @Test
+    void anonymous_publication_token_cannot_read_results_for_session_on_another_board() {
+        String otherBoardId = UUID.randomUUID().toString();
+        boardsRepository.create(new Board(otherBoardId, "Other board", "whiteboard", "advanced", "alice", "active", Instant.now(), Instant.now()));
+        String sessionId = votingService.openSession(
+                votingService.createDraftSession(
+                        otherBoardId,
+                        VotingScopeType.BOARD,
+                        otherBoardId,
+                        "alice",
+                        new VotingRules(true, true, 2, true, false, true, null)).id())
+                .id();
+        String token = publicationService.createBoardPublication(boardId, "alice", null, false).accessToken();
+
+        given()
+                .when().get("/api/boards/" + otherBoardId + "/voting-sessions/" + sessionId + "/results?publicationToken=" + token)
+                .then()
+                .statusCode(404)
+                .body("code", equalTo("NOT_FOUND"));
+    }
+
+
 }
