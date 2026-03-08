@@ -14,7 +14,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
         info = @Info(
                 title = "Whiteboard Server REST API",
                 version = "1.0.0",
-                description = "REST API for board management, snapshots, invites, publications, and identity lookups for the whiteboard server.",
+                description = "REST API for board management, snapshots, invites, publications, comments, assets, and identity lookups for the whiteboard server.",
                 contact = @Contact(name = "java-whiteboard-server")
         ),
         tags = {
@@ -23,6 +23,7 @@ import org.eclipse.microprofile.openapi.annotations.tags.Tag;
                 @Tag(name = "Invites", description = "Board invite creation, validation, acceptance, and revocation endpoints."),
                 @Tag(name = "Publications", description = "Board publication management and publication resolution endpoints."),
                 @Tag(name = "Comments", description = "Durable board comment endpoints."),
+                @Tag(name = "Assets", description = "Durable board asset metadata endpoints."),
                 @Tag(name = "Identity", description = "Authenticated user identity endpoints.")
         }
 )

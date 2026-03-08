@@ -17,6 +17,8 @@ public record ApiError(
                 "PUBLICATION_INACTIVE",
                 "COMMENT_NOT_FOUND",
                 "COMMENT_STATE_INVALID",
+                "ASSET_NOT_FOUND",
+                "ASSET_STATE_INVALID",
                 "PAYLOAD_TOO_LARGE"
         })
         String code,
