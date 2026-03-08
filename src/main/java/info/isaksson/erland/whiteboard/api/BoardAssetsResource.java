@@ -1,23 +1,14 @@
 package info.isaksson.erland.whiteboard.api;
 
-import info.isaksson.erland.whiteboard.api.FeatureSupport;
 import info.isaksson.erland.whiteboard.api.dto.ActivateAssetRequest;
 import info.isaksson.erland.whiteboard.api.dto.AssetFailureRequest;
 import info.isaksson.erland.whiteboard.api.dto.AssetResponse;
 import info.isaksson.erland.whiteboard.api.dto.CreateAssetRequest;
 import info.isaksson.erland.whiteboard.api.errors.ApiError;
-import info.isaksson.erland.whiteboard.assets.Asset;
-import info.isaksson.erland.whiteboard.assets.AssetService;
-import info.isaksson.erland.whiteboard.publication.Publication;
-import info.isaksson.erland.whiteboard.publication.PublicationPolicy;
-import info.isaksson.erland.whiteboard.security.Authz;
-import info.isaksson.erland.whiteboard.security.BoardGuards;
-import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -45,16 +36,10 @@ import java.util.List;
 public class BoardAssetsResource {
 
     @Inject
-    AssetService assetService;
+    AssetApplicationService assetApplicationService;
 
     @Inject
-    BoardGuards boardGuards;
-
-    @Inject
-    PublicationPolicy publicationPolicy;
-
-    @Inject
-    SecurityIdentity identity;
+    AssetRequestSupport requestSupport;
 
     @Inject
     FeatureSupport featureSupport;
@@ -70,14 +55,7 @@ public class BoardAssetsResource {
             @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
             @Parameter(description = "Optional publication token for anonymous publication access.", required = false, schema = @Schema(type = SchemaType.STRING)) @QueryParam("publicationToken") String publicationToken) {
         featureSupport.requireAssetsEnabled();
-        Publication publication = resolveReadablePublication(boardId, publicationToken);
-        if (!identity.isAnonymous()) {
-            String userId = Authz.userId(identity);
-            boardGuards.requireAssetUseAccess(boardId, userId, publication != null);
-        } else if (publication == null) {
-            throw new NotFoundException();
-        }
-        return assetService.listForBoard(boardId).stream()
+        return assetApplicationService.listAssets(boardId, publicationToken).stream()
                 .map(AssetResponse::from)
                 .toList();
     }
@@ -93,28 +71,16 @@ public class BoardAssetsResource {
             @APIResponse(responseCode = "404", description = "Board not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
     })
     public Response createAsset(
-                                @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
-                                @RequestBody(required = true, description = "Asset metadata creation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CreateAssetRequest.class)))
-                                CreateAssetRequest req) {
+            @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+            @RequestBody(required = true, description = "Asset metadata creation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = CreateAssetRequest.class)))
+            CreateAssetRequest req) {
         featureSupport.requireAssetsEnabled();
-        featureSupport.requireAssetsEnabled();
-        Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        boardGuards.requireAssetManageAccess(boardId, userId);
         try {
-            Asset created = assetService.createBoardAssetMetadata(
-                    boardId,
-                    req == null ? null : req.logicalName(),
-                    req == null ? null : req.contentType(),
-                    req == null || req.sizeBytes() == null ? -1L : req.sizeBytes(),
-                    userId,
-                    req == null ? null : req.integrityHash(),
-                    req == null ? null : req.versionTag());
             return Response.status(Response.Status.CREATED)
-                    .entity(AssetResponse.from(created))
+                    .entity(AssetResponse.from(assetApplicationService.createAsset(boardId, req)))
                     .build();
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return requestSupport.validationError(e.getMessage());
         }
     }
 
@@ -129,23 +95,15 @@ public class BoardAssetsResource {
             @APIResponse(responseCode = "404", description = "Asset not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
     })
     public Response activateAsset(
-                                  @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
-                                  @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId,
-                                  @RequestBody(required = true, description = "Asset activation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ActivateAssetRequest.class)))
-                                  ActivateAssetRequest req) {
+            @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+            @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId,
+            @RequestBody(required = true, description = "Asset activation request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ActivateAssetRequest.class)))
+            ActivateAssetRequest req) {
         featureSupport.requireAssetsEnabled();
-        Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        boardGuards.requireAssetManageAccess(boardId, userId);
-        requireAssetForBoard(boardId, assetId);
         try {
-            return assetService.markActive(assetId, req == null ? null : req.versionTag())
-                    .map(AssetResponse::from)
-                    .map(Response::ok)
-                    .orElseThrow(NotFoundException::new)
-                    .build();
+            return Response.ok(AssetResponse.from(assetApplicationService.activateAsset(boardId, assetId, req))).build();
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return requestSupport.validationError(e.getMessage());
         }
     }
 
@@ -160,23 +118,15 @@ public class BoardAssetsResource {
             @APIResponse(responseCode = "404", description = "Asset not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
     })
     public Response markFailed(
-                               @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
-                               @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId,
-                               @RequestBody(required = true, description = "Asset failure request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = AssetFailureRequest.class)))
-                               AssetFailureRequest req) {
+            @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+            @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId,
+            @RequestBody(required = true, description = "Asset failure request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = AssetFailureRequest.class)))
+            AssetFailureRequest req) {
         featureSupport.requireAssetsEnabled();
-        Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        boardGuards.requireAssetManageAccess(boardId, userId);
-        requireAssetForBoard(boardId, assetId);
         try {
-            return assetService.markFailed(assetId, req == null ? null : req.failureReason())
-                    .map(AssetResponse::from)
-                    .map(Response::ok)
-                    .orElseThrow(NotFoundException::new)
-                    .build();
+            return Response.ok(AssetResponse.from(assetApplicationService.failAsset(boardId, assetId, req))).build();
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return requestSupport.validationError(e.getMessage());
         }
     }
 
@@ -191,23 +141,15 @@ public class BoardAssetsResource {
             @APIResponse(responseCode = "404", description = "Asset not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
     })
     public Response quarantine(
-                               @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
-                               @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId,
-                               @RequestBody(required = true, description = "Asset quarantine request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = AssetFailureRequest.class)))
-                               AssetFailureRequest req) {
+            @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+            @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId,
+            @RequestBody(required = true, description = "Asset quarantine request.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = AssetFailureRequest.class)))
+            AssetFailureRequest req) {
         featureSupport.requireAssetsEnabled();
-        Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        boardGuards.requireAssetManageAccess(boardId, userId);
-        requireAssetForBoard(boardId, assetId);
         try {
-            return assetService.quarantine(assetId, req == null ? null : req.failureReason())
-                    .map(AssetResponse::from)
-                    .map(Response::ok)
-                    .orElseThrow(NotFoundException::new)
-                    .build();
+            return Response.ok(AssetResponse.from(assetApplicationService.quarantineAsset(boardId, assetId, req))).build();
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return requestSupport.validationError(e.getMessage());
         }
     }
 
@@ -221,47 +163,13 @@ public class BoardAssetsResource {
             @APIResponse(responseCode = "404", description = "Asset not found or not accessible.", content = @Content(mediaType = MediaType.APPLICATION_JSON, schema = @Schema(implementation = ApiError.class)))
     })
     public Response deleteAsset(
-                                @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
-                                @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId) {
+            @Parameter(description = "Board identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("boardId") String boardId,
+            @Parameter(description = "Asset identifier.", required = true, schema = @Schema(type = SchemaType.STRING)) @PathParam("assetId") String assetId) {
         featureSupport.requireAssetsEnabled();
-        Authz.requireUserOrAdmin(identity);
-        String userId = Authz.userId(identity);
-        boardGuards.requireAssetManageAccess(boardId, userId);
-        requireAssetForBoard(boardId, assetId);
         try {
-            return assetService.delete(assetId)
-                    .map(AssetResponse::from)
-                    .map(Response::ok)
-                    .orElseThrow(NotFoundException::new)
-                    .build();
+            return Response.ok(AssetResponse.from(assetApplicationService.deleteAsset(boardId, assetId))).build();
         } catch (IllegalArgumentException e) {
-            return validationError(e.getMessage());
+            return requestSupport.validationError(e.getMessage());
         }
-    }
-
-    private Asset requireAssetForBoard(String boardId, String assetId) {
-        Asset asset = assetService.findById(assetId).orElseThrow(NotFoundException::new);
-        if (!boardId.equals(asset.boardId())) {
-            throw new NotFoundException();
-        }
-        return asset;
-    }
-
-    private Publication resolveReadablePublication(String boardId, String publicationToken) {
-        PublicationPolicy.Decision decision = publicationPolicy.validateToken(publicationToken);
-        if (!decision.valid()) {
-            return null;
-        }
-        Publication publication = decision.publication();
-        if (publication == null || !boardId.equals(publication.boardId())) {
-            return null;
-        }
-        return publication;
-    }
-
-    private static Response validationError(String message) {
-        return Response.status(Response.Status.BAD_REQUEST)
-                .entity(new ApiError("VALIDATION_ERROR", message))
-                .build();
     }
 }

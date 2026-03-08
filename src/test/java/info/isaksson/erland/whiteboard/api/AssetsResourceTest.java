@@ -149,6 +149,41 @@ public class AssetsResourceTest {
                 .body("[0].logicalName", equalTo("public.pdf"));
     }
 
+
+
+    @Test
+    @TestSecurity(user = "carol", roles = { "whiteboard-user" })
+    void asset_mutation_rejects_asset_from_another_board_path() {
+        String otherBoardId = UUID.randomUUID().toString();
+        boardsRepository.create(new Board(otherBoardId, "Other board", "whiteboard", "advanced", "alice", "active", Instant.now(), Instant.now()));
+        if (inMemoryBoardPermissionsRepository != null) {
+            inMemoryBoardPermissionsRepository.upsert(otherBoardId, "carol", "editor");
+        }
+        Asset asset = assetService.createBoardAssetMetadata(boardId, "diagram.png", "image/png", 2048L, "carol", null, null);
+
+        given()
+                .contentType("application/json")
+                .body("{\"versionTag\":\"wrong-board\"}")
+                .when().post("/api/boards/" + otherBoardId + "/assets/" + asset.id() + "/activate")
+                .then()
+                .statusCode(404)
+                .body("code", equalTo("NOT_FOUND"));
+    }
+
+    @Test
+    void anonymous_publication_token_cannot_list_assets_on_another_board() {
+        assetService.createBoardAssetMetadata(boardId, "public.pdf", "application/pdf", 4096L, "alice", null, null);
+        String token = publicationService.createBoardPublication(boardId, "alice", null, false).accessToken();
+        String otherBoardId = UUID.randomUUID().toString();
+        boardsRepository.create(new Board(otherBoardId, "Other board", "whiteboard", "advanced", "alice", "active", Instant.now(), Instant.now()));
+
+        given()
+                .when().get("/api/boards/" + otherBoardId + "/assets?publicationToken=" + token)
+                .then()
+                .statusCode(404)
+                .body("code", equalTo("NOT_FOUND"));
+    }
+
     @Test
     @TestSecurity(user = "carol", roles = { "whiteboard-user" })
     void fail_requires_reason() {
