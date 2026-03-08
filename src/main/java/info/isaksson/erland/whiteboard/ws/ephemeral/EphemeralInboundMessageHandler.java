@@ -1,44 +1,36 @@
 package info.isaksson.erland.whiteboard.ws.ephemeral;
 
+import java.util.List;
+
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.inject.Instance;
 import jakarta.inject.Inject;
 import jakarta.websocket.Session;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
 import info.isaksson.erland.whiteboard.config.FeatureToggles;
-import info.isaksson.erland.whiteboard.ws.TokenBucketRateLimiter;
 import info.isaksson.erland.whiteboard.ws.WsMessage;
 import info.isaksson.erland.whiteboard.ws.WsMetrics;
 import info.isaksson.erland.whiteboard.ws.WsOutboundSupport;
-import info.isaksson.erland.whiteboard.ws.WsSessionProps;
 
 @ApplicationScoped
 public class EphemeralInboundMessageHandler {
 
     private final EphemeralAccessPolicy accessPolicy;
-    private final EphemeralStateRegistry stateRegistry;
-    private final TimerEphemeralStateRegistry timerStateRegistry;
-    private final ReactionPayloadValidator reactionPayloadValidator;
-    private final TimerControlPayloadValidator timerControlPayloadValidator;
+    private final List<EphemeralEventHandler> handlers;
     private final WsOutboundSupport outboundSupport;
     private final WsMetrics metrics;
     private final FeatureToggles featureToggles;
 
     @Inject
     public EphemeralInboundMessageHandler(EphemeralAccessPolicy accessPolicy,
-                                          EphemeralStateRegistry stateRegistry,
-                                          TimerEphemeralStateRegistry timerStateRegistry,
-                                          ReactionPayloadValidator reactionPayloadValidator,
-                                          TimerControlPayloadValidator timerControlPayloadValidator,
+                                          Instance<EphemeralEventHandler> handlers,
                                           WsOutboundSupport outboundSupport,
                                           WsMetrics metrics,
                                           FeatureToggles featureToggles) {
         this.accessPolicy = accessPolicy;
-        this.stateRegistry = stateRegistry;
-        this.timerStateRegistry = timerStateRegistry;
-        this.reactionPayloadValidator = reactionPayloadValidator;
-        this.timerControlPayloadValidator = timerControlPayloadValidator;
+        this.handlers = handlers.stream().toList();
         this.outboundSupport = outboundSupport;
         this.metrics = metrics;
         this.featureToggles = featureToggles;
@@ -51,9 +43,21 @@ public class EphemeralInboundMessageHandler {
                                           TimerControlPayloadValidator timerControlPayloadValidator,
                                           WsOutboundSupport outboundSupport,
                                           WsMetrics metrics) {
-        this(accessPolicy, stateRegistry, timerStateRegistry, reactionPayloadValidator, timerControlPayloadValidator, outboundSupport, metrics, new FeatureToggles());
-        this.featureToggles.wsReactionsEnabled = true;
-        this.featureToggles.timerEnabled = true;
+        this.accessPolicy = accessPolicy;
+        this.handlers = List.of(
+                new ReactionEphemeralHandler(reactionPayloadValidator, outboundSupport, metrics),
+                new TimerControlEphemeralHandler(timerControlPayloadValidator, timerStateRegistry, outboundSupport),
+                new SessionSignalEphemeralHandler(stateRegistry, outboundSupport));
+        this.outboundSupport = outboundSupport;
+        this.metrics = metrics;
+        this.featureToggles = enabledFeatureToggles();
+    }
+
+    private static FeatureToggles enabledFeatureToggles() {
+        FeatureToggles toggles = new FeatureToggles();
+        toggles.wsReactionsEnabled = true;
+        toggles.timerEnabled = true;
+        return toggles;
     }
 
     public void handle(JsonNode root,
@@ -80,15 +84,11 @@ public class EphemeralInboundMessageHandler {
             return;
         }
 
-
-        if (eventType == EphemeralEventType.REACTION && featureToggles != null && !featureToggles.wsReactionsEnabled()) {
-            metrics.incRejected("reaction_disabled");
-            outboundSupport.send(session, new WsMessage.Error("FEATURE_DISABLED", "Reaction events are disabled on this server."));
+        if (!featureEnabled(eventType, session)) {
             return;
         }
-        if ((eventType == EphemeralEventType.TIMER_CONTROL || eventType == EphemeralEventType.TIMER_STATE) && featureToggles != null && !featureToggles.timerEnabled()) {
-            metrics.incRejected("timer_disabled");
-            outboundSupport.send(session, new WsMessage.Error("FEATURE_DISABLED", "Shared timer events are disabled on this server."));
+        if (eventType == EphemeralEventType.TIMER_STATE) {
+            outboundSupport.send(session, new WsMessage.Error("FORBIDDEN", "Timer state is server-managed and cannot be published by clients."));
             return;
         }
         if (!accessPolicy.canEmit(permission, eventType)) {
@@ -96,66 +96,36 @@ public class EphemeralInboundMessageHandler {
             return;
         }
 
-        switch (eventType) {
-            case REACTION -> handleReaction(session, boardId, fromUserId, connectionId, payload);
-            case TIMER_CONTROL -> handleTimerControl(session, boardId, fromUserId, connectionId, payload);
-            case TIMER_STATE -> outboundSupport.send(session, new WsMessage.Error("FORBIDDEN", "Timer state is server-managed and cannot be published by clients."));
-            default -> handleSessionScopedSignal(boardId, fromUserId, connectionId, eventType, payload);
+        EphemeralEventHandler handler = handlerFor(eventType);
+        if (handler == null) {
+            outboundSupport.send(session, new WsMessage.Error("VALIDATION_ERROR", "Unsupported ephemeral event type."));
+            return;
         }
+        handler.handle(new EphemeralRequestContext(session, boardId, fromUserId, permission, connectionId), eventType, payload);
     }
 
-    private void handleReaction(Session session, String boardId, String fromUserId, String connectionId, JsonNode payload) {
-        String validationError = reactionPayloadValidator.validate(payload);
-        if (validationError != null) {
-            outboundSupport.send(session, new WsMessage.Error("VALIDATION_ERROR", validationError));
-            return;
+    private boolean featureEnabled(EphemeralEventType eventType, Session session) {
+        if (eventType == EphemeralEventType.REACTION && featureToggles != null && !featureToggles.wsReactionsEnabled()) {
+            metrics.incRejected("reaction_disabled");
+            outboundSupport.send(session, new WsMessage.Error("FEATURE_DISABLED", "Reaction events are disabled on this server."));
+            return false;
         }
-        Object rlObj = session.getUserProperties().get(WsSessionProps.REACTION_RATE_LIMITER);
-        if (rlObj instanceof TokenBucketRateLimiter rl && !rl.tryConsume()) {
-            metrics.incRejected("reaction_rate_limited");
-            outboundSupport.send(session, new WsMessage.Error("RATE_LIMITED", "Too many reactions."));
-            return;
+        if ((eventType == EphemeralEventType.TIMER_CONTROL || eventType == EphemeralEventType.TIMER_STATE)
+                && featureToggles != null
+                && !featureToggles.timerEnabled()) {
+            metrics.incRejected("timer_disabled");
+            outboundSupport.send(session, new WsMessage.Error("FEATURE_DISABLED", "Shared timer events are disabled on this server."));
+            return false;
         }
-        outboundSupport.broadcastEphemeral(boardId, new WsMessage.Ephemeral(
-                boardId,
-                connectionId,
-                fromUserId,
-                EphemeralEventType.REACTION.wireName(),
-                payload,
-                false));
+        return true;
     }
 
-    private void handleTimerControl(Session session, String boardId, String fromUserId, String connectionId, JsonNode payload) {
-        String validationError = timerControlPayloadValidator.validate(payload);
-        if (validationError != null) {
-            outboundSupport.send(session, new WsMessage.Error("VALIDATION_ERROR", validationError));
-            return;
+    private EphemeralEventHandler handlerFor(EphemeralEventType eventType) {
+        for (EphemeralEventHandler handler : handlers) {
+            if (handler.supports(eventType)) {
+                return handler;
+            }
         }
-        JsonNode statePayload;
-        try {
-            statePayload = timerStateRegistry.applyControl(boardId, connectionId, fromUserId, payload);
-        } catch (IllegalArgumentException | IllegalStateException e) {
-            outboundSupport.send(session, new WsMessage.Error("VALIDATION_ERROR", e.getMessage()));
-            return;
-        }
-        outboundSupport.broadcastEphemeral(boardId, new WsMessage.Ephemeral(
-                boardId,
-                connectionId,
-                fromUserId,
-                EphemeralEventType.TIMER_STATE.wireName(),
-                statePayload,
-                false));
-    }
-
-    private void handleSessionScopedSignal(String boardId, String fromUserId, String connectionId, EphemeralEventType eventType, JsonNode payload) {
-        EphemeralSignal signal = new EphemeralSignal(boardId, connectionId, fromUserId, eventType, payload, false);
-        stateRegistry.update(signal);
-        outboundSupport.broadcastEphemeral(boardId, new WsMessage.Ephemeral(
-                boardId,
-                connectionId,
-                fromUserId,
-                eventType.wireName(),
-                payload,
-                false));
+        return null;
     }
 }
